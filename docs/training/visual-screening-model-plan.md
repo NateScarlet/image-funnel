@@ -6,67 +6,79 @@
 
 因此在一期把标注在流失前蒸馏为轻量、可长期留存的训练样本，并明确训练对象。**本文件只覆盖采集与计划，不训练模型本身。**
 
-决策事实在主应用 `Service.Commit` 同步捕获，不是 `post_commit_session` 钩子：钩子只拿到目录相对路径、GraphQL `Image` 不暴露 `action`、rating 未变时 commit 直接跳过写盘、且钩子是 `go run(...)` fire-and-forget，失败只记日志，丢一次就永久缺一个负例。缩略图生成与落盘由服务端持有的后台流水线在提交返回后完成。
+**比较域是同主题（目录）内的相对比较，不是全局绝对二分类。** 实际应用按目录筛选、目录即主题，跨主题的图片不直接比较。归档反映用户作出每次取舍时实际看到的参照：以 Mark 当时会话全部保留图为基准，判断候选是否优于全部基准。
 
 ## 2. 数据规范
 
 ### 2.1 采集时机与零值安全
 
-- 每条实际产生的标记决策（含 rating 未变、仍被用户决策过的图片）产生一条事件。
-- 文件不存在或 ID 不匹配（外部修改）的图片不产生事件。
-- `Service.Commit` 只同步完成评级 XMP 写入、元数据更新事件与 session-saved 发布，然后立即返回；采样与提交后钩子都不在返回路径上。它向服务端持有的后台流水线非阻塞登记本次提交的全部决策，归档开启时注入异步流水线、关闭时注入不创建后台任务的空实现，提交行为与现状一致。
-- 后台任务按「先采样、后钩子」顺序执行：钩子可能把源图移走或删除，抢先执行会让采样拿不到原图。图片 ID 带版本、文件不会被原地修改，采样阶段直接从提交时捕获的 `SourcePath` 读原图，无需在提交同步阶段固化缩略图字节。
-- 采样失败按 fire-and-forget 处理：单条失败（缩略图生成 / CAS / JSONL 任一失败）只记 zap 日志，不使 Commit 失败、不中断后续样本、不阻止钩子触发；XMP 作为唯一真相源的写入不被阻断。
+- 样本载荷在 **`Service.MarkImage` 当下（会话调用 `Session.MarkImage` 时）**产生，而不是 Commit 时：读取本次 Mark 之前会话内**全部**处于 KEEP 状态的图作为基准集合，并**排除当前图片自己**。基准在 Mark 之前读取，因为本次若判 KEEP 会进入后续判断的基准集合；上一轮的基准图后续被重新标记时不会拿自己和自己比。
+- 基准集合在 Mark 当下从会话状态读取，不从回收站推断（事后从回收站推断仅约 29% 可对应）。无基准时（首张图就被直接排除）写空列表，不伪造。
+- Mark 同步路径**只做内存读取，不做任何图像计算**。diff、裁剪、缩放、编码全部在提交后的后台流水线完成。
+- 每条样本载荷与对应的 undo 闭包绑定：闭包除回滚会话状态，还同步移除该条载荷。换轮时「恢复到轮末」的闭包链会连锁执行上一个 Mark 闭包，载荷随之逐条移除；被撤销的 Mark 不进入归档。
+- `Service.Commit` 不再构造样本，只把会话中**存活的载荷**非阻塞交给后台流水线，提交后清空以避免重复归档。Commit 仍同步完成评级 XMP 写入、元数据更新事件与 session-saved 发布；归档开启时注入异步流水线、关闭时注入不创建后台任务的空实现，**未开启归档时 Commit 行为与现状完全一致**。
+- 后台任务按「先采样、后钩子」顺序执行：钩子可能把源图移走或删除，抢先执行会让采样拿不到原图。单条采样失败只记 zap 日志，不使 Commit 失败、不中断后续样本、不阻止钩子触发；XMP 作为唯一真相源的写入不被阻断。
 
 ### 2.2 事件字段
 
-事件写入 `<DataDir>/training-samples/samples.jsonl`（append-only，UTF-8，每行一个 JSON 对象）：
+事件写入 `<DataDir>/training-samples-v2/samples.jsonl`（append-only，UTF-8，每行一个 JSON 对象）。一条记录 = 一次 Mark 决策 = 一组图像产物（候选块 + 本次 Mark 前全部基准块），整组共用这条记录的 `action` 标签。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `imageId` | string | 图片标识（领域 ID 字符串） |
-| `directoryId` | string | 目录标识 |
-| `sessionId` | string | 会话标识；指纹缺失时作为后备分组键 |
+| `imageId` | string | 候选图片标识（领域 ID 字符串） |
+| `directoryId` | string | 目录标识（主题） |
+| `sessionId` | string | 会话标识，代表决策链；**切分主键** |
 | `round` | int | 筛选轮次 |
 | `action` | string | `KEEP` / `SHELVE` / `REJECT` |
-| `rating` | int | 目标评分 |
 | `timestamp` | string | RFC3339Nano 决策时间 |
-| `thumbnailCid` | string | 缩略图 CID，通过它引用字节，不重复写 JSONL |
-| `fingerprint` | string | 字符串指纹，可空；为空时不参与指纹分组 |
+| `candidateCid` | string | 候选块 CID，通过它引用字节 |
+| `baselineCids` | string[] | 基准块 CID 列表，与 `baselineImageIds` 一一对应；无基准时为 `[]` |
+| `baselineImageIds` | string[] | 本次 Mark 前会话全部 KEEP 图的标识（排除当前图自己）；无基准时为 `[]` |
+| `fingerprint` | string | 字符串指纹，可空；**降级为辅助元数据，不再参与切分** |
 
-### 2.3 缩略图内容寻址布局
+`rating` **不进入 v2 记录**：它只是 action 的 XMP 载体（inpaint 0/1、full 4/2、3=SHELVE），不是训练标签，也不再当作置信度权重。
 
-- 后台采样阶段从原图生成固定 **224×224 居中裁剪 WebP** 缩略图（质量 75，数 KB 级），写入独立持久目录，不依赖会过期的变体缓存。
-- CID 计算：SHA-256 摘要 → CIDv1（version 1 / codec raw 0x55 / sha2-256 multihash 0x12）→ base32 大写无填充，首字符为多基前缀 `B`。
-- 令 `h = CID` 去掉首字符 `B`；分片目录取 `h` 的倒数第 3、2 位；文件路径为 `<DataDir>/training-samples/cas/<分片>/<h>.data`。
-- 分片布局与用户其它 IPFS 兼容 CAS 项目（如 `obsidian-content-addressed-attachments` 的 `formatRelPath`）一致，便于跨项目共用工具。
-- 相同字节只落盘一次；JSONL 只记 CID 引用。
-- 根目录固定为 `<DataDir>/training-samples/cas/`，不在活跃图片目录、不被 retention 扫描、不在变体缓存路径上；由环境变量 `IMAGE_FUNNEL_ENABLE_TRAINING_SAMPLE_ARCHIVE=true` 显式开启，默认关闭。`DataDir` 取 `IMAGE_FUNNEL_DATA_DIR`，未设置时回退到用户配置目录下的应用目录，与加载延迟归因共用同一数据根目录。
+### 2.3 图像块产物与内容寻址布局
 
-### 2.4 字符串指纹及其局限（必须随数据一起传播）
+后台采样阶段为一条样本生成一组**各 224×224 的 WebP 块**（质量 75）：候选块 + 每个基准各一块，各自一个 CID。每块按 CID 落盘，JSONL 只记引用。
 
-提取方式：递归遍历完整 ComfyUI `prompt` JSON，收集**所有字符串类型的值**，排序去重后以换行连接并计算 SHA-256；数字（种子、steps、cfg、尺寸）被自然忽略；不硬编码任何节点类型或字段名；无 PNG 元数据、解析失败或没有字符串时留空。
+**取块判据是原图分辨率本身**，无启发式阈值、不依赖 rating 或生成方式约定：
+
+- **同分辨率（局部重绘）**：在原图上计算候选与所有基准的差异区域并集（ImageMagick `-compose difference -composite` / `-threshold 0` / `-background black` / `%@` 取 trim 包围盒），用**同一绝对坐标**分别裁候选与各基准原图，再各自缩放到 224²；各块逐块对齐、可直接对比。
+- **不同分辨率（全新生成）**：局部重绘必然保持分辨率不变，因此差异即全图；不做 diff 定位与裁剪，候选块与各基准块直接用**整张原图**缩放到 224²。
+
+224² 块只作为训练时的对比输入，**不用于计算 diff 坐标**（分辨率不足）。基准留空时不产出 diff patch，候选按整图缩放。
+
+**编码缓存**：维护 `(原图标识, 裁剪坐标) → CID` 缓存。同一张图同一裁剪坐标在多轮比较中反复出现时直接命中缓存取 CID，省掉重复裁剪、缩放、编码。缓存只加速编码，diff 仍照常计算，不影响数据语义。
+
+**不并存 224² 居中缩略图**：局部重绘样本的全图缩略图是降采样噪音、无训练价值。产物不按 rating / 生成方式 / 面积阈值区分场景。
+
+CID 计算：SHA-256 摘要 → CIDv1（version 1 / codec raw 0x55 / sha2-256 multihash 0x12）→ base32 大写无填充，首字符为多基前缀 `B`。令 `h = CID` 去掉首字符 `B`；分片目录取 `h` 的倒数第 3、2 位；文件路径为 `<DataDir>/training-samples-v2/cas/<分片>/<h>.data`。分片布局与用户其它 IPFS 兼容 CAS 项目一致。相同字节只落盘一次；根目录固定，不在活跃图片目录、不被 retention 扫描、不在变体缓存路径上。
+
+### 2.4 字符串指纹及其局限（仅作辅助元数据）
+
+提取方式：递归遍历完整 ComfyUI `prompt` JSON，收集**所有字符串类型的值**，排序去重后以换行连接并计算 SHA-256；数字（种子、steps、cfg、尺寸）被自然忽略；不硬编码任何节点类型或字段名；无 PNG 元数据、解析失败或没有字符串时留空。不存提示词正文与完整 workflow JSON（实测元数据 50–58KB/张，会压垮 2–20KB 的轻量样本）。
 
 **已知局限（启发式，不得当作精确的「同提示词」语义）：**
 
 - 收集到的字符串可能混入节点类型名、模型名、节点 ID、自定义节点写入的随机串或临时路径，导致同配置算出不同指纹；
-- 也可能把不同配置的图归为一组；
-- 不存提示词正文与完整 workflow JSON（实测元数据 50–58KB/张，会压垮 2–20KB 的轻量样本）。
+- 也可能把不同配置的图归为一组。
 
-`sessionId` **不是**同提示词分组键。`comfyui_remix.toml` 表明会话提交后 `/remix` 会对 4 星图应用 `--add` / `--remove` / `--lora` / `--cfg` / `--aspect` 等编辑，编辑项取笛卡尔积、种子按 job 变化；同一批筛选的图配置可以完全不同。`sessionId` 只作为指纹缺失时的后备弱分组键，表示「同批筛选」。
+因此指纹与目录都**降级为辅助元数据**，不再作为切分主键。切分主键改为 `sessionId`（决策链）。
 
 ### 2.5 读取与切分
 
-- `ReadRecords(dataRoot)` 流式读取 JSONL；`LatestPerImage(records)` 按图片标识只保留 timestamp 最大的一条（「留到最后」），timestamp 相同时以轮次较大者为准。保留旧记录供后续时间衰减使用。
-- `Split(records, testRatio)` 按分组键整组贪心分配，**禁止随机切分**：优先 `fingerprint`（可用时），否则回退 `sessionId`。报告必须注明上述分组键局限。
+- `ReadRecords(dataRoot)` 流式读取 JSONL；归档不存在时返回空集合。读取侧**只认 v2 格式**：遇到含旧 `thumbnailCid` 的记录或缺失 `candidateCid` 的记录立即失败，不做兼容降级。
+- `LatestPerImage(records)` 按图片标识只保留 timestamp 最大的一条（「留到最后」），timestamp 相同时以轮次较大者为准。样本在 Mark 当下捕获基准集合，因此「留到最后」的记录天然携带最终决策那次 Mark 的基准参照；更早的记录仍留在归档中供时间衰减分析使用。
+- `Split(records, testRatio)` 按 `sessionId`（决策链）整组贪心分配，**禁止随机切分**：同一会话样本不得跨 train/test，不同会话可切分到两侧，以测试模型泛化到同主题下重绘的其他部位。
 
 ## 3. 目标训练对象计划（一期）
 
-- **任务**：KEEP vs REJECT 二分类；SHELVE 降权或视为未标注，不硬塞类别。
-- **特征**：CLIP / OpenCLIP ViT-B/32 图像特征（224×224 输入，512 维），可由归档的 224² 缩略图随时重算。
+- **任务**：同主题内相对比较。模型输入为「候选块 + 基准块集合」，学习候选是否优于全部基准；KEEP 表示比所有基准都好或好到无法区分，REJECT 表示明显差。SHELVE 不硬塞类别。
+- **特征**：从归档的候选块与基准块分别计算 CLIP / OpenCLIP ViT-B/32 特征（224×224 输入，512 维），构成对比输入；可随时重算。
 - **模型**：线性探针（sklearn `LogisticRegression`，CPU 可跑）起步；备选 Tip-Adapter。
 - **数据量级**：CLIP 论文 4-shot≈zero-shot、16-shot≈强基线；数十张起步即可「比随机好」，稳定建议数百到数千，且必须类别平衡（含负例）。
-- **数据切分**：按第 2.5 节分组切分；单独报告「组内 KEEP vs REJECT」区分度；报告中注明分组键局限。
+- **数据切分**：按第 2.5 节以会话为分组键切分；单独报告「组内 KEEP vs REJECT」区分度；报告中注明会话分组与辅助指纹的局限。
 - **评估**：测试集必须含被保存的负例；指标 precision@k、REJECT 召回、人工推翻率。建议门槛 precision@10 > 70% 才接入 UI。
 - **使用方式**：初期只输出建议 / 排序 / 高亮，**不自动执行 REJECT**，人工保留最终决定权。
 - **不做**：LoRA / 主动学习 / 提示词条件模型（留到后续阶段，视样本量与漂移情况再定）；不训练模型本身（本 issue 仅交付采集 + 计划）。
@@ -74,5 +86,6 @@
 ## 4. 配置与运维
 
 - 环境变量 `IMAGE_FUNNEL_ENABLE_TRAINING_SAMPLE_ARCHIVE=true` 开启；未设置、无效值或 `false` 均关闭（零值安全）。
-- 开启后启动时创建 `<DataDir>/training-samples/cas/` 与 `<DataDir>/training-samples/samples.jsonl`；日志会打印解析后的数据目录绝对路径。
-- 失败处理：缩略图生成、CAS 写入、JSONL 追加任一失败只记录 zap 日志（后台 fire-and-forget），不会使 `Service.Commit` 返回错误；单条失败不中断其余样本，也不阻止「采样后」的提交后钩子。
+- 开启后在归档根目录 `<DataDir>/training-samples-v2/` 下按需创建 `cas/` 与 `samples.jsonl`；日志会打印解析后的数据目录绝对路径。旧 `training-samples` 目录不读写、不迁移。
+- 失败处理：图像块生成、CAS 写入、JSONL 追加任一失败只记录 zap 日志（后台 fire-and-forget），不会使 `Service.Commit` 返回错误；单条失败不中断其余样本，也不阻止「采样后」的提交后钩子。
+- 差异工具使用项目已有的 ImageMagick（magick），不引入 imgdiff / odiff 等新依赖。

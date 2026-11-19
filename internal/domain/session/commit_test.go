@@ -438,18 +438,20 @@ func TestService_Commit_RecordsSampleForEachDecisionIncludingUnchangedRating(t *
 		assert.Equal(t, scalar.ToID("s1"), sample.SessionID)
 		assert.Equal(t, sess.CurrentRound(), sample.Round)
 		assert.False(t, sample.Timestamp.IsZero())
-		assert.NotEmpty(t, sample.SourcePath)
-		assert.Equal(t, filepath.Join(tempDir, fmt.Sprintf("test%d.jpg", i+1)), sample.SourcePath)
+		assert.Equal(t, testutil.Rel(t, fmt.Sprintf("test%d.jpg", i+1)), sample.SourceRelPath)
 	}
 	assert.Equal(t, scalar.ToID("1"), samples[0].ImageID)
 	assert.Equal(t, shared.ImageActionKeep, samples[0].Action)
-	assert.Equal(t, 5, samples[0].Rating)
+	assert.Empty(t, samples[0].Baselines, "首张决策无基准")
+
 	assert.Equal(t, scalar.ToID("2"), samples[1].ImageID)
 	assert.Equal(t, shared.ImageActionKeep, samples[1].Action)
-	assert.Equal(t, 5, samples[1].Rating)
+	require.Len(t, samples[1].Baselines, 1)
+	assert.Equal(t, scalar.ToID("1"), samples[1].Baselines[0].ID)
+
 	assert.Equal(t, scalar.ToID("3"), samples[2].ImageID)
 	assert.Equal(t, shared.ImageActionReject, samples[2].Action)
-	assert.Equal(t, -1, samples[2].Rating)
+	require.Len(t, samples[2].Baselines, 2, "基准是本次 Mark 前的全部 KEEP 图")
 }
 
 func TestService_Commit_RecorderError_NotReturnedToCaller(t *testing.T) {

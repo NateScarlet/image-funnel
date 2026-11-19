@@ -49,8 +49,6 @@ func (s *Session) Actions() iter.Seq2[*image.Image, shared.ImageAction] {
 
 func (s *Service) Commit(ctx context.Context, session *Session, writeActions *shared.WriteActions) (written int, matched int, err error) {
 	errs := util.NewErrorsBuilder(0)
-	// 提交时只捕获决策事实；采样与钩子由后台流水线在本次提交返回后处理
-	samples := make([]*Sample, 0)
 
 	// 遍历所有持有且符合当前筛选条件的图片操作
 	for img, action := range session.Actions() {
@@ -97,19 +95,6 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 
 		now := time.Now()
 		absPath := img.RelPath().Abs(s.rootDir)
-
-		// rating 未变仍是一次真实决策，同样作为样本载荷交给后台流水线；
-		// 采样失败只记日志，不进入 Commit 返回值，也不阻断 XMP 写入
-		samples = append(samples, &Sample{
-			ImageID:     currentImg.ID(),
-			DirectoryID: session.DirectoryID(),
-			SessionID:   session.ID(),
-			Round:       session.CurrentRound(),
-			Action:      action,
-			Rating:      rating,
-			Timestamp:   now,
-			SourcePath:  absPath,
-		})
 
 		// 如果当前磁盘状态（即刚刚加载的状态）已经符合目标 Rating，跳过写入
 		if rating == currentImg.Rating() {
@@ -168,8 +153,10 @@ func (s *Service) Commit(ctx context.Context, session *Session, writeActions *sh
 
 	s.sessionSaved.Publish(ctx, session.ID())
 
-	// 非阻塞登记：同步部分已全部完成，采样与钩子不进入 Commit 返回路径
-	s.commitPipeline.Enqueue(samples, session.DirectoryID())
+	// 只提交会话中存活的载荷（Mark 产生、Undo 移除），不再在 Commit 重新构造样本；
+	// 非阻塞登记后清空，采样与钩子不进入 Commit 返回路径
+	s.commitPipeline.Enqueue(session.LiveSamples(), session.DirectoryID())
+	session.ClearSamples()
 
 	return written, matched, errs.Build()
 }

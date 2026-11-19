@@ -14,7 +14,7 @@ func TestSampleArchiveRoot(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := filepath.Join(dataDir, "training-samples")
+		want := filepath.Join(dataDir, "training-samples-v2")
 		if got != want {
 			t.Fatalf("sampleArchiveRoot(%q) = %q, want %q", dataDir, got, want)
 		}
@@ -32,7 +32,7 @@ func TestSampleArchiveRoot(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := filepath.Join(wd, "relative", "data-dir", "training-samples")
+		want := filepath.Join(wd, "relative", "data-dir", "training-samples-v2")
 		if got != want {
 			t.Fatalf("sampleArchiveRoot = %q, want %q", got, want)
 		}

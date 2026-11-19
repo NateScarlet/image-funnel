@@ -2,6 +2,8 @@ package samplearchive_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -16,17 +18,17 @@ import (
 
 func TestReadRecords_ReturnsEveryEvent(t *testing.T) {
 	dataRoot := t.TempDir()
-	recorder, err := samplearchive.NewRecorder(dataRoot,
-		&fakeThumbnailer{data: []byte("thumbnail-bytes")},
+	recorder, err := samplearchive.NewRecorder(dataRoot, dataRoot,
+		&fakeSampleImageGenerator{candidateCID: "B-candidate", baselineCIDs: []string{"B-base"}},
 		&fakePromptReader{},
 	)
 	require.NoError(t, err)
 	for i := range 3 {
 		require.NoError(t, recorder.Record(context.Background(), &session.Sample{
-			ImageID: scalar.ToID("img-1"),
-			Action:  shared.ImageActionKeep,
-			Rating:  5,
-			Round:   i,
+			ImageID:   scalar.ToID("img-1"),
+			Action:    shared.ImageActionKeep,
+			Round:     i,
+			Baselines: []session.SampleImage{{ID: scalar.ToID("base-1")}},
 		}))
 	}
 
@@ -42,6 +44,16 @@ func TestReadRecords_MissingArchiveReturnsEmpty(t *testing.T) {
 	assert.Empty(t, records)
 }
 
+func TestReadRecords_OldFormatFailsFast(t *testing.T) {
+	dataRoot := t.TempDir()
+	legacy := `{"imageId":"1","sessionId":"s1","action":"KEEP","thumbnailCid":"B-old"}` + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dataRoot, "samples.jsonl"), []byte(legacy), 0o644))
+
+	_, err := samplearchive.ReadRecords(dataRoot)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "legacy")
+}
+
 func TestLatestPerImage_KeepsMaxTimestamp(t *testing.T) {
 	base := time.Date(2026, 11, 18, 3, 0, 0, 0, time.UTC)
 	records := []samplearchive.Record{
@@ -53,30 +65,24 @@ func TestLatestPerImage_KeepsMaxTimestamp(t *testing.T) {
 	latest := samplearchive.LatestPerImage(records)
 	require.Len(t, latest, 2)
 	assert.Equal(t, "a", latest[0].ImageID)
-	assert.Equal(t, 2, latest[0].Round, "同一图片跨轮次只保留最后决策")
+	assert.Equal(t, 2, latest[0].Round, "同一图片跨轮次只保留最后决策，其基准集合即该次 Mark 当下的参照")
 }
 
-func TestSplit_KeepsSameGroupOnSameSide(t *testing.T) {
+func TestSplit_KeepsSameSessionOnSameSide(t *testing.T) {
 	base := time.Date(2026, 11, 18, 3, 0, 0, 0, time.UTC)
 	records := []samplearchive.Record{
 		{ImageID: "1", Fingerprint: "fp-a", SessionID: "s1", Timestamp: base},
-		{ImageID: "2", Fingerprint: "fp-a", SessionID: "s2", Timestamp: base},
-		{ImageID: "3", SessionID: "s3", Timestamp: base},
-		{ImageID: "4", SessionID: "s3", Timestamp: base},
+		{ImageID: "2", Fingerprint: "fp-b", SessionID: "s1", Timestamp: base},
+		{ImageID: "3", SessionID: "s2", Timestamp: base},
+		{ImageID: "4", SessionID: "s2", Timestamp: base},
 	}
-	// 让 test 拿到指纹组，train 拿到 session 组
 	train, test := samplearchive.Split(records, 0.5)
 
 	for _, rec := range test {
-		if rec.Fingerprint == "fp-a" {
-			for _, other := range test {
-				assert.Equal(t, "fp-a", other.Fingerprint, "同指纹必须同侧")
-			}
-		}
+		assert.Equal(t, "s1", rec.SessionID, "同一决策链必须同侧，指纹降级为辅助元数据")
 	}
 	for _, rec := range train {
-		assert.Empty(t, rec.Fingerprint)
-		assert.Equal(t, "s3", rec.SessionID, "指纹缺失时按 session id 分组")
+		assert.Equal(t, "s2", rec.SessionID)
 	}
 	assert.Len(t, train, 2)
 	assert.Len(t, test, 2)
@@ -89,6 +95,7 @@ func TestSplit_RespectsApproximateRatio(t *testing.T) {
 		records = append(records, samplearchive.Record{
 			ImageID:     string(rune('a' + i)),
 			Fingerprint: string(rune('A' + i)),
+			SessionID:   string(rune('s' + rune(i))),
 			Timestamp:   base,
 		})
 	}

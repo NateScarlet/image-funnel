@@ -79,10 +79,11 @@ func newTrashSweeper(useSystemRecycleBin bool) localfs.TrashSweeper {
 	return localfs.NewPhysicalDeleteSweeper()
 }
 
-// sampleArchiveRoot 把训练样本归档根目录固定在 DataDir 下的 training-samples 子目录，并解析为绝对路径。
+// sampleArchiveRoot 把训练样本归档根目录固定在 DataDir 下的 training-samples-v2 子目录，并解析为绝对路径。
+// v2 与旧 training-samples 隔离，旧样本不读写、不迁移。
 // 与加载延迟归因一致，服务端不依赖进程当前工作目录。
 func sampleArchiveRoot(dataDir string) (string, error) {
-	return filepath.Abs(filepath.Join(dataDir, "training-samples"))
+	return filepath.Abs(filepath.Join(dataDir, "training-samples-v2"))
 }
 
 func main() {
@@ -254,13 +255,13 @@ func main() {
 	var commitPipeline session.CommitPipeline
 	var waitPipeline func()
 	if cfg.EnableTrainingSampleArchive {
-		// 训练样本归档开启时落盘到 <DataDir>/training-samples/，布局为 <DataDir>/training-samples/cas/<分片>/<h>.data
+		// 训练样本归档开启时落盘到 <DataDir>/training-samples-v2/，布局为 <DataDir>/training-samples-v2/cas/<分片>/<h>.data
 		dataRoot, err := sampleArchiveRoot(cfg.DataDir)
 		if err != nil {
 			logger.Fatal("failed to resolve training sample data directory", zap.Error(err))
 		}
-		recorder, err := samplearchive.NewRecorder(dataRoot,
-			samplearchive.NewMagickThumbnailer(cfg.MagickConcurrency),
+		recorder, err := samplearchive.NewRecorder(dataRoot, cfg.AbsRootDir,
+			samplearchive.NewMagickSampleGenerator(dataRoot, cfg.MagickConcurrency),
 			samplearchive.PNGPromptReader{},
 		)
 		if err != nil {

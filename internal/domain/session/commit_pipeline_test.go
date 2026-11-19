@@ -92,7 +92,8 @@ func waitFor(t *testing.T, ch <-chan struct{}, msg string) {
 func TestCommit_WhenArchiveEnabled_ReturnsBeforeSamplingAndHook(t *testing.T) {
 	tempDir := t.TempDir()
 
-	entered := make(chan struct{})
+	// 缓冲 1：采样 goroutine 可能先于主 goroutine 进入 waitFor，避免信号被 default 分支丢弃
+	entered := make(chan struct{}, 1)
 	release := make(chan struct{})
 	recorder := &FakeSampleRecorder{OnRecord: func(context.Context, *Sample) error {
 		select {
@@ -211,7 +212,8 @@ func TestCommit_WhenArchiveEnabled_SamplingReadsSourceBeforeHookRemovesIt(t *tes
 		100, time.Now(), metadata.NewXMPData(0, "", time.Time{}, ""), 100, 100,
 	)
 
-	entered := make(chan struct{})
+	// 缓冲 1：采样 goroutine 可能先于主 goroutine 进入 waitFor，避免信号被 default 分支丢弃
+	entered := make(chan struct{}, 1)
 	release := make(chan struct{})
 	var sampledContent string
 	var contentMu sync.Mutex
@@ -222,7 +224,7 @@ func TestCommit_WhenArchiveEnabled_SamplingReadsSourceBeforeHookRemovesIt(t *tes
 		}
 		<-release
 		// 钩子已在采样之后执行；这里读到的仍是原图内容
-		data, err := os.ReadFile(s.SourcePath)
+		data, err := os.ReadFile(s.SourceRelPath.Abs(tempDir))
 		if err != nil {
 			return err
 		}

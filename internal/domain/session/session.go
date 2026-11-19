@@ -36,6 +36,7 @@ type Session struct {
 	undoStack  []func()                         // 撤销操作栈
 	actions    map[scalar.ID]shared.ImageAction // 图片操作映射
 	durations  map[scalar.ID]scalar.Duration    // 图片操作耗时映射
+	samples    []*Sample                        // 会话中存活的样本载荷（Mark 产生、Undo 移除、Commit 提交后清空）
 
 	currentRound       int                // 当前筛选轮次
 	committed          map[scalar.ID]bool // 记录已提交过的图片 ID
@@ -78,6 +79,7 @@ func New(id scalar.ID, directoryID scalar.ID, filter *shared.ImageFilters, targe
 		undoStack:          make([]func(), 0),
 		actions:            actions,
 		durations:          make(map[scalar.ID]scalar.Duration),
+		samples:            make([]*Sample, 0),
 		currentRound:       0,
 		committed:          make(map[scalar.ID]bool),
 		imageFilterBuilder: imageFilterBuilder,
@@ -201,6 +203,40 @@ func (s *Session) KeptImages(limit, offset int) []*image.Image {
 
 	return kept[offset:end]
 }
+
+// #region 样本载荷
+
+// baselinesForMark 读取本次 Mark 之前会话内全部 KEEP 图作为基准集合，并排除当前图自己。
+// 基准在 Mark 当下从会话状态读取，不从回收站推断；当前图若曾被判 KEEP，这次被重新标记时
+// 必须排除，否则会出现「拿自己和自己比」的样本。
+func (s *Session) baselinesForMark(currentID scalar.ID) []SampleImage {
+	kept := s.KeptImages(-1, 0)
+	baselines := make([]SampleImage, 0, len(kept))
+	for _, img := range kept {
+		if img.ID() == currentID {
+			continue
+		}
+		baselines = append(baselines, SampleImage{ID: img.ID(), RelPath: img.RelPath()})
+	}
+	return baselines
+}
+
+// LiveSamples 返回会话当前存活的样本载荷副本。
+func (s *Session) LiveSamples() []*Sample {
+	return slices.Clone(s.samples)
+}
+
+// ClearSamples 在 Commit 把载荷交给流水线后清空，避免重复 Commit 产生重复归档。
+func (s *Session) ClearSamples() {
+	s.samples = nil
+}
+
+// removeSample 按指针身份移除一条载荷；载荷已被 ClearSamples 清空时为空操作。
+func (s *Session) removeSample(sample *Sample) {
+	s.samples = slices.DeleteFunc(s.samples, func(existing *Sample) bool { return existing == sample })
+}
+
+// #endregion
 
 // CurrentIndex 返回当前处理图片的索引
 func (s *Session) CurrentIndex() int {

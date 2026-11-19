@@ -60,7 +60,7 @@ func (p *AsyncCommitPipeline) Enqueue(samples []*Sample, directoryID scalar.ID) 
 }
 
 func (p *AsyncCommitPipeline) run(samples []*Sample, directoryID scalar.ID) {
-	// 采样阶段：图片 ID 带版本，文件不会被原地修改，直接按提交时捕获的 SourcePath 读原图
+	// 采样阶段：图片 ID 带版本，文件不会被原地修改；按 Mark 当下捕获的相对路径在后台解析出绝对路径读原图
 	for _, sample := range samples {
 		if p.ctx.Err() != nil {
 			return

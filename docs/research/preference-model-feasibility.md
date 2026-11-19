@@ -34,14 +34,14 @@
 - 判别边界由正负两侧共同决定；被 retention 清掉的正是「低星 + 旧」的负例，也是定义「什么该被排除」的关键样本。模型坍缩文献指出，有偏选择会剪掉分布尾部（[arXiv:2606.13732](https://arxiv.org/abs/2606.13732)），而偏好模型里「尾部」恰恰是奇怪的、难判的 reject 案例。
 - 理论上可用 PU 学习在「正例 + 未标注池」上训练，但本项目两个前提都不满足：（1）SCAR 被 rating+时间选择破坏（[arXiv:1811.04820](https://arxiv.org/abs/1811.04820)）；（2）类先验 α 未知且随 retention 持续漂移（同上，PU 多数方法需要 α 作为输入）。PU 在有限正例下还需非负风险估计器来防止过拟合（[arXiv:1703.00593](https://arxiv.org/abs/1703.00593)），复杂度远高于直接保留负例代理。
 - 回收站不是解决方案：`trashImages` 只是移动（`example_hooks/retention.py:137-154`），且回收站本身可能被再次清理；把训练数据建立在回收站上非常脆弱。
-- **最低成本可行解：在 trash 发生前，把每条即将离开的标注「蒸馏」成轻量代理样本（标签 + 缩略图 + 哈希）持久化。** 见第 5、6 节。
+- **最低成本可行解：在 trash 发生前，把每条即将离开的标注「蒸馏」成轻量代理样本（标签 + 候选块/基准块 + CID）持久化。** 见第 5、6 节。
 
 ---
 
 ## 1. 学习范式
 
 **（1）三态 + 评分：优先当作「序数（ordinal）」而非名义三分类。**
-KEEP / SHELVE / REJECT 有明确顺序，rating 也是有序分数。深度学习中把序数标签当普通类别交叉熵会丢失类间顺序信息，已有专门的序数回归方法（[Universally Rank Consistent Ordinal Regression, arXiv:2110.07470](https://arxiv.org/abs/2110.07470)；[Soft Labels for Ordinal Regression, CVPR 2019](https://doi.org/10.1109/cvpr.2019.00487)）。落地建议：先做 `KEEP vs REJECT` 二分类（最贴合产品决策），rating 作为样本置信度权重；三态作为可选的序数扩展。
+KEEP / SHELVE / REJECT 有明确顺序，rating 也是有序分数。深度学习中把序数标签当普通类别交叉熵会丢失类间顺序信息，已有专门的序数回归方法（[Universally Rank Consistent Ordinal Regression, arXiv:2110.07470](https://arxiv.org/abs/2110.07470)；[Soft Labels for Ordinal Regression, CVPR 2019](https://doi.org/10.1109/cvpr.2019.00487)）。落地建议（按 v2 归档调整）：训练目标改为同主题内相对比较——模型输入为「候选块 + 基准块集合」，学习候选是否优于全部基准；rating 只是 action 的 XMP 载体，不再作为样本置信度权重；三态作为可选的序数扩展。
 
 **（2）SHELVE 的歧义：不要硬塞进某一类。**
 SHELVE 语义是「暂缓/不确定」，本质是软标签或「未标注」。可两种处理并用：训练主分类器时把 SHELVE 降权或作为未标注样本（与第 0 节 PU 视角一致，[arXiv:1811.04820](https://arxiv.org/abs/1811.04820)）；需要三态输出时再作为序数中间档。把它当硬负例会污染边界，当硬正例会引入噪声。
@@ -49,7 +49,7 @@ SHELVE 语义是「暂缓/不确定」，本质是软标签或「未标注」。
 **（3）相对批次偏好 vs 绝对偏好。**
 - 「在 N 张里挑好的」是 pairwise/listwise 排序问题：Bradley–Terry 配对比较（[Revisiting the Bradley-Terry model, DOI:10.7465/jkdi.2013.24.5.1089](https://doi.org/10.7465/jkdi.2013.24.5.1089)；[Inductive Pairwise Ranking, arXiv:1702.02661](https://arxiv.org/abs/1702.02661)）与 BPR 隐式反馈排序（[arXiv:1205.2618](https://arxiv.org/abs/1205.2618)）是标准范式；人类偏好学习也普遍用成对比较（[Christiano et al. 2017, arXiv:1706.03741](https://arxiv.org/abs/1706.03741)，仅需不到 1% 交互反馈）。优势：对全局审美尺度漂移不敏感；劣势：必须保存「哪些图在同批次被比较」的上下文。
 - 绝对偏好（KEEP/REJECT）直接对应 XMP 里的 `action`，无需批次上下文，工程上最省。
-- **本研究建议**：主任务用绝对三态/二分类；可选地从「同一会话/批次内 KEEP 必优于 REJECT」自动构造配对约束，但需要在轻量样本里新增 `batch/session id` 字段（当前 XMP 不含此信息，见第 6 节）。注意：显式标注已存在，BPR 式隐式反馈不是主要范式；只有第 0 节的删失场景才把「未标注」引入视野。
+- **本研究建议**：v2 归档已在轻量样本中记录 `sessionId`（决策链）及本次 Mark 的全部基准图，主任务直接做同主题内相对比较（候选是否优于全部基准），并以 `sessionId` 作为切分主键。注意：显式标注已存在，BPR 式隐式反馈不是主要范式；只有第 0 节的删失场景才把「未标注」引入视野。
 
 ---
 
@@ -79,7 +79,7 @@ SHELVE 语义是「暂缓/不确定」，本质是软标签或「未标注」。
 ## 4. 标注质量、偏好漂移
 
 - **噪声**：DNN 对标签噪声敏感，且**有偏噪声比无偏噪声危害更大**（[Deep Learning with Label Noise, arXiv:2205.14299](https://arxiv.org/abs/2205.14299)；[Label noise in segmentation networks, arXiv:2107.02189](https://arxiv.org/abs/2107.02189)）。审美标注本身高度主观（[BDN / AVA, arXiv:1601.04155](https://arxiv.org/abs/1601.04155)；[艺术图像审美主观性, arXiv:2303.15166](https://arxiv.org/abs/2303.15166)）；小型多模态模型甚至表现出更强刻板偏置（[AesBiasBench, arXiv:2509.11620](https://arxiv.org/abs/2509.11620)）。
-- **缓解**：用 rating 作置信度（高星/剧烈反对 = 高置信，SHELVE = 低置信），软标签/序数损失，时间衰减加权，并优先用「同批次相对比较」降低全局尺度漂移影响。
+- **缓解**：用「同主题内相对比较」（候选块 + 基准块集合）降低全局尺度漂移影响，配合软标签/序数损失与时间衰减加权；rating 仅作 action 的 XMP 载体，不再当置信度。
 - **漂移真实存在且可建模**：时序矩阵分解追踪个体偏好漂移，在合成数据/Ciao 上 RMSE 改善约 20% / 5%（[Temporal MF, arXiv:1510.05263](https://arxiv.org/abs/1510.05263)）；流式推荐用「时间感知采样 + 新旧数据分层」兼顾概念漂移与长期偏好（[arXiv:2009.06824](https://arxiv.org/abs/2009.06824)）。XMP 已含 `timestamp`，可直接用于时间衰减——这是本项目现成优势。
 
 ---

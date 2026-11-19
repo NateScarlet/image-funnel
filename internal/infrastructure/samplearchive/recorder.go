@@ -12,9 +12,10 @@ import (
 	"main/internal/domain/session"
 )
 
-// Thumbnailer 在提交当下从原图生成 224×224 缩略图字节。
-type Thumbnailer interface {
-	Thumbnail(ctx context.Context, srcPath string) ([]byte, error)
+// SampleImageGenerator 在后台从候选原图与基准原图生成一组 224² 块，各自按 CID 落盘，
+// 返回候选块 CID 与基准块 CID 列表（顺序与传入的基准路径一致）。
+type SampleImageGenerator interface {
+	Generate(ctx context.Context, candidatePath string, baselinePaths []string) (candidateCID string, baselineCIDs []string, err error)
 }
 
 // PromptReader 尽力读取 PNG 中的 ComfyUI prompt JSON；读不到时返回 nil。
@@ -22,67 +23,79 @@ type PromptReader interface {
 	Prompt(path string) []byte
 }
 
-// Record 是 JSONL 中的一条归档记录，通过 CID 引用缩略图，不重复写字节。
+// Record 是 v2 JSONL 中的一条归档记录。一条记录 = 一次 Mark 决策 = 一组图像产物：
+// 候选块 + 本次 Mark 前全部基准块，各一个 CID，共用这条记录的 action 标签。
+//
+// BaselineImageIDs 与 BaselineCIDs 一一对应；无基准时两者都写空数组，不伪造。
+// rating 不进入 v2 记录：它只是 action 的 XMP 载体，不是训练标签或置信度权重。
 type Record struct {
-	ImageID      string    `json:"imageId"`
-	DirectoryID  string    `json:"directoryId"`
-	SessionID    string    `json:"sessionId"`
-	Round        int       `json:"round"`
-	Action       string    `json:"action"`
-	Rating       int       `json:"rating"`
-	Timestamp    time.Time `json:"timestamp"`
-	ThumbnailCID string    `json:"thumbnailCid"`
-	Fingerprint  string    `json:"fingerprint,omitempty"`
+	ImageID          string    `json:"imageId"`
+	DirectoryID      string    `json:"directoryId"`
+	SessionID        string    `json:"sessionId"`
+	Round            int       `json:"round"`
+	Action           string    `json:"action"`
+	Timestamp        time.Time `json:"timestamp"`
+	CandidateCID     string    `json:"candidateCid"`
+	BaselineCIDs     []string  `json:"baselineCids"`
+	BaselineImageIDs []string  `json:"baselineImageIds"`
+	Fingerprint      string    `json:"fingerprint,omitempty"`
 }
 
-// Recorder 把标注决策蒸馏为只增不改的派生快照：缩略图按 CID 落盘，JSONL 只记引用。
+// Recorder 把标注决策蒸馏为只增不改的派生快照：图像块按 CID 落盘，JSONL 只记引用。
 type Recorder struct {
-	cas     *CAS
-	thumbs  Thumbnailer
-	prompts PromptReader
-	logPath string
-	mu      sync.Mutex
+	generator SampleImageGenerator
+	prompts   PromptReader
+	logPath   string
+	baseDir   string
+	mu        sync.Mutex
 }
 
-// NewRecorder 在 dataRoot 下建立 cas/ 目录与 samples.jsonl；dataRoot 由装配方给定，
-// 主应用传入 DataDir 下的 training-samples 目录，使落盘布局为 <DataDir>/training-samples/cas/<分片>/<h>.data。
-func NewRecorder(dataRoot string, thumbs Thumbnailer, prompts PromptReader) (*Recorder, error) {
+// NewRecorder 在 dataRoot 下建立 samples.jsonl；baseDir 用于把样本中的根相对路径解析为绝对路径。
+// dataRoot 由装配方给定为 <DataDir>/training-samples-v2。
+func NewRecorder(dataRoot string, baseDir string, generator SampleImageGenerator, prompts PromptReader) (*Recorder, error) {
 	if err := os.MkdirAll(dataRoot, 0o755); err != nil {
 		return nil, fmt.Errorf("create sample archive directory: %w", err)
 	}
 	return &Recorder{
-		cas:     NewCAS(filepath.Join(dataRoot, "cas")),
-		thumbs:  thumbs,
-		prompts: prompts,
-		logPath: filepath.Join(dataRoot, "samples.jsonl"),
+		generator: generator,
+		prompts:   prompts,
+		logPath:   filepath.Join(dataRoot, "samples.jsonl"),
+		baseDir:   baseDir,
 	}, nil
 }
 
-// Record 生成缩略图、按 CID 去重落盘并追加一条 JSONL 记录；任何失败都返回给调用者。
+// Record 生成候选块与基准块、按 CID 去重落盘并追加一条 JSONL 记录；任何失败都返回给调用者。
 func (r *Recorder) Record(ctx context.Context, sample *session.Sample) error {
-	thumb, err := r.thumbs.Thumbnail(ctx, sample.SourcePath)
-	if err != nil {
-		return fmt.Errorf("generate training thumbnail: %w", err)
+	baselinePaths := make([]string, 0, len(sample.Baselines))
+	baselineIDs := make([]string, 0, len(sample.Baselines))
+	for _, baseline := range sample.Baselines {
+		baselinePaths = append(baselinePaths, baseline.RelPath.Abs(r.baseDir))
+		baselineIDs = append(baselineIDs, baseline.ID.String())
 	}
 
-	cid, err := r.cas.Put(thumb)
+	candidateCID, baselineCIDs, err := r.generator.Generate(ctx, sample.SourceRelPath.Abs(r.baseDir), baselinePaths)
 	if err != nil {
-		return fmt.Errorf("store training thumbnail: %w", err)
+		return fmt.Errorf("generate training sample images: %w", err)
+	}
+	// 无基准时写空数组而不是 null，明确表达「本次没有参照」而非数据缺失
+	if baselineCIDs == nil {
+		baselineCIDs = make([]string, 0)
 	}
 
-	// 指纹是启发式分组键，解析不出（无 PNG 元数据 / 非法 JSON）时留空，不影响归档
-	fingerprint := Fingerprint(r.prompts.Prompt(sample.SourcePath))
+	// 指纹降级为辅助元数据，不再作为切分主键
+	fingerprint := Fingerprint(r.prompts.Prompt(sample.SourceRelPath.Abs(r.baseDir)))
 
 	line, err := json.Marshal(Record{
-		ImageID:      sample.ImageID.String(),
-		DirectoryID:  sample.DirectoryID.String(),
-		SessionID:    sample.SessionID.String(),
-		Round:        sample.Round,
-		Action:       sample.Action.String(),
-		Rating:       sample.Rating,
-		Timestamp:    sample.Timestamp,
-		ThumbnailCID: cid,
-		Fingerprint:  fingerprint,
+		ImageID:          sample.ImageID.String(),
+		DirectoryID:      sample.DirectoryID.String(),
+		SessionID:        sample.SessionID.String(),
+		Round:            sample.Round,
+		Action:           sample.Action.String(),
+		Timestamp:        sample.Timestamp,
+		CandidateCID:     candidateCID,
+		BaselineCIDs:     baselineCIDs,
+		BaselineImageIDs: baselineIDs,
+		Fingerprint:      fingerprint,
 	})
 	if err != nil {
 		return fmt.Errorf("encode training sample: %w", err)

@@ -37,10 +37,27 @@ func (s *Session) MarkImage(imageID scalar.ID, action shared.ImageAction, option
 	prevQueue := make([]int, len(s.queue))
 	copy(prevQueue, s.queue)
 
+	// 在本次 Mark 改变会话状态之前捕获基准集合，并构造样本载荷。
+	// 基准来自会话当前全部 KEEP 图（排除当前图自己）；Mark 同步路径不做任何图像计算。
+	sample := &Sample{
+		ImageID:       imageID,
+		DirectoryID:   s.directoryID,
+		SessionID:     s.id,
+		Round:         s.currentRound,
+		Action:        action,
+		Timestamp:     time.Now(),
+		SourceRelPath: s.images[targetImgIdx].RelPath(),
+		Baselines:     s.baselinesForMark(imageID),
+	}
+	s.samples = append(s.samples, sample)
+
 	// 记录撤销操作
 	prevAction, hasPrevAction := s.actions[imageID]
 	var previousIndex = s.currentIdx
 	s.undoStack = append(s.undoStack, func() {
+		// 样本与会话状态在同一撤销边界上回滚，被反悔的 Mark 不进入归档
+		s.removeSample(sample)
+
 		// 恢复操作状态
 		if !hasPrevAction {
 			delete(s.actions, imageID)

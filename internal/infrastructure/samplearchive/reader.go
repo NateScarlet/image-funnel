@@ -26,9 +26,23 @@ func ReadRecords(dataRoot string) ([]Record, error) {
 	var records []Record
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
+		// v2 归档只认候选块格式；遇到旧格式立即失败，不做兼容降级
+		var legacy struct {
+			ThumbnailCID string `json:"thumbnailCid"`
+		}
 		var record Record
-		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+		line := scanner.Bytes()
+		if err := json.Unmarshal(line, &legacy); err != nil {
 			return nil, fmt.Errorf("decode sample archive line %d: %w", len(records)+1, err)
+		}
+		if legacy.ThumbnailCID != "" {
+			return nil, fmt.Errorf("decode sample archive line %d: legacy thumbnail format is not supported by v2", len(records)+1)
+		}
+		if err := json.Unmarshal(line, &record); err != nil {
+			return nil, fmt.Errorf("decode sample archive line %d: %w", len(records)+1, err)
+		}
+		if record.CandidateCID == "" {
+			return nil, fmt.Errorf("decode sample archive line %d: missing candidateCid", len(records)+1)
 		}
 		records = append(records, record)
 	}
@@ -40,6 +54,9 @@ func ReadRecords(dataRoot string) ([]Record, error) {
 
 // LatestPerImage 按图片标识只保留 timestamp 最大的一条（「留到最后」的决策）；
 // timestamp 相同时以轮次较大者为准。结果按图片标识排序，保证确定性。
+//
+// 样本在 Mark 当下捕获基准集合，因此「留到最后」的一条记录天然携带最终决策那次
+// Mark 的基准参照；更早的记录仍留在归档中供时间衰减分析使用。
 func LatestPerImage(records []Record) []Record {
 	latest := make(map[string]Record, len(records))
 	for _, record := range records {
@@ -58,15 +75,10 @@ func LatestPerImage(records []Record) []Record {
 	return result
 }
 
-// GroupKey 返回分组键：字符串指纹可用时优先用它，否则回退 session id。
-//
-// 局限：指纹是启发式（可能被节点 ID / 随机串 / 临时路径污染），session id 只表示
-// 同批筛选而非同配置（remix 会在提交后按评分编辑生成参数），二者都不是精确的
-// 「同提示词」语义。报告中必须标注这一点。
+// GroupKey 返回切分分组键：会话标识（决策链）。
+// 同一会话的样本不跨 train/test，不同会话可切分到两侧，以测试模型泛化到
+// 同主题下重绘的其他部位。字符串指纹与目录降级为辅助元数据，不再作为切分主键。
 func GroupKey(record Record) string {
-	if record.Fingerprint != "" {
-		return "fp:" + record.Fingerprint
-	}
 	return "session:" + record.SessionID
 }
 
