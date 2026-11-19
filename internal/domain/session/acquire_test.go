@@ -24,7 +24,7 @@ func TestService_LastSession(t *testing.T) {
 	defer topicCleanup()
 
 	imageFb := image.NewFilterBuilder()
-	svc, cleanupService := NewService(fakeRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, "", imageFb, &FakeHookRunner{}, NullSampleRecorder{})
+	svc, cleanupService := NewService(fakeRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, "", imageFb, newNullPipeline())
 	defer cleanupService()
 
 	dirID := scalar.ToID("dir-1")

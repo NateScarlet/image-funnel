@@ -15,10 +15,12 @@ import (
 	"main/internal/testutil"
 	"os"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 // #region Helper Functions
@@ -258,20 +260,40 @@ func (s *FakeImageRepo) Find(ctx context.Context, relPath relpath.Path) iter.Seq
 
 var _ image.Repository = (*FakeImageRepo)(nil)
 
-// FakeSampleRecorder 记录 Commit 产生的样本，用于验证采集 seam
+// FakeSampleRecorder 记录 Commit 后台流水线产生的样本，用于验证采集 seam。
+// 采样现在发生在后台 goroutine，故对 Samples 的访问需加锁（用 SamplesSnapshot 读取）。
 type FakeSampleRecorder struct {
-	Samples []*Sample
-	Err     error
+	mu       sync.Mutex
+	samples  []*Sample
+	Err      error
+	OnRecord func(context.Context, *Sample) error
 }
 
-func (f *FakeSampleRecorder) Record(_ context.Context, sample *Sample) error {
+func (f *FakeSampleRecorder) Record(ctx context.Context, sample *Sample) error {
+	if f.OnRecord != nil {
+		return f.OnRecord(ctx, sample)
+	}
 	if f.Err != nil {
 		return f.Err
 	}
-	f.Samples = append(f.Samples, sample)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.samples = append(f.samples, sample)
 	return nil
 }
 
+// SamplesSnapshot 返回已记录样本的副本，供后台任务完成后断言
+func (f *FakeSampleRecorder) SamplesSnapshot() []*Sample {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]*Sample(nil), f.samples...)
+}
+
 var _ SampleRecorder = (*FakeSampleRecorder)(nil)
+
+// newNullPipeline 未开启归档时使用的流水线替身：不建后台任务，仅按现状触发钩子
+func newNullPipeline() *NullCommitPipeline {
+	return NewNullCommitPipeline(context.Background(), NullSampleRecorder{}, &FakeHookRunner{}, &FakeDirectoryResolver{}, zap.NewNop())
+}
 
 // #endregion

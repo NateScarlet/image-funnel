@@ -8,9 +8,9 @@ import (
 	"main/internal/shared"
 )
 
-// SampleRecorder 训练样本采集端口。实现方负责在提交当下生成缩略图、计算 CID 与
+// SampleRecorder 训练样本采集端口。实现方负责从原图生成缩略图、计算 CID 与
 // 字符串指纹，并写入 append-only 归档；本端口只接收决策事实，不感知存储细节。
-// 未启用归档时由装配方注入 NullSampleRecorder，Commit 行为保持不变。
+// 调用方是提交后后台流水线，单条失败由流水线记日志，不进入 Commit 返回值。
 type SampleRecorder interface {
 	Record(ctx context.Context, sample *Sample) error
 }
@@ -28,7 +28,8 @@ type Sample struct {
 	SourcePath  string
 }
 
-// NullSampleRecorder 空实现：零值安全，未配置归档时保持原有提交行为。
+// NullSampleRecorder 空实现：零值安全，归档关闭时由装配方注入，
+// Record 为空操作，配合同步流水线不创建采样后台任务。
 type NullSampleRecorder struct{}
 
 func (NullSampleRecorder) Record(context.Context, *Sample) error { return nil }

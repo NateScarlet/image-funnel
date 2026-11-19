@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"main/internal/domain/directory"
-	"main/internal/domain/hook"
 	"main/internal/domain/image"
 	"main/internal/domain/metadata"
 	"main/internal/pubsub"
@@ -30,8 +29,7 @@ type Service struct {
 	sessionSaved       pubsub.Topic[scalar.ID]
 	rootDir            string
 	imageFilterBuilder *image.FilterBuilder
-	hookRunner         hook.Runner
-	sampleRecorder     SampleRecorder
+	commitPipeline     CommitPipeline
 }
 
 func NewService(
@@ -45,8 +43,7 @@ func NewService(
 	sessionSaved pubsub.Topic[scalar.ID],
 	rootDir string,
 	imageFilterBuilder *image.FilterBuilder,
-	hookRunner hook.Runner,
-	sampleRecorder SampleRecorder,
+	commitPipeline CommitPipeline,
 ) (*Service, func()) {
 	s := &Service{
 		sessionRepo:        sessionRepo,
@@ -59,8 +56,7 @@ func NewService(
 		sessionSaved:       sessionSaved,
 		rootDir:            rootDir,
 		imageFilterBuilder: imageFilterBuilder,
-		hookRunner:         hookRunner,
-		sampleRecorder:     sampleRecorder,
+		commitPipeline:     commitPipeline,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

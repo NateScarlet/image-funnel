@@ -249,9 +249,12 @@ func main() {
 		defer cancel()
 	}
 
-	// 训练样本归档默认关闭；开启时落盘到 <DataDir>/training-samples/，布局为 <DataDir>/training-samples/cas/<分片>/<h>.data
-	var sampleRecorder session.SampleRecorder = session.NullSampleRecorder{}
+	// 提交后流水线的 ctx 由服务端持有：随服务关闭取消，后台任务不复用已结束的请求 ctx
+	pipelineCtx, cancelPipeline := context.WithCancel(context.Background())
+	var commitPipeline session.CommitPipeline
+	var waitPipeline func()
 	if cfg.EnableTrainingSampleArchive {
+		// 训练样本归档开启时落盘到 <DataDir>/training-samples/，布局为 <DataDir>/training-samples/cas/<分片>/<h>.data
 		dataRoot, err := sampleArchiveRoot(cfg.DataDir)
 		if err != nil {
 			logger.Fatal("failed to resolve training sample data directory", zap.Error(err))
@@ -263,11 +266,21 @@ func main() {
 		if err != nil {
 			logger.Fatal("failed to initialize training sample archive", zap.Error(err))
 		}
-		sampleRecorder = recorder
+		asyncPipeline := session.NewAsyncCommitPipeline(pipelineCtx, recorder, hookRunner, dirSvc, logger)
+		commitPipeline = asyncPipeline
+		waitPipeline = asyncPipeline.Wait
 		logger.Info("training sample archive enabled", zap.String("path", dataRoot))
+	} else {
+		commitPipeline = session.NewNullCommitPipeline(pipelineCtx, session.NullSampleRecorder{}, hookRunner, dirSvc, logger)
 	}
+	defer func() {
+		cancelPipeline()
+		if waitPipeline != nil {
+			waitPipeline()
+		}
+	}()
 
-	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, imageRepo, fileChangedTopic, metadataUpdatedTopic, dirSvc, logger, sessionTopic, cfg.AbsRootDir, imageFilterBuilder, hookRunner, sampleRecorder)
+	sessionService, sessionCleanup := session.NewService(sessionRepo, metadataRepo, imageRepo, fileChangedTopic, metadataUpdatedTopic, dirSvc, logger, sessionTopic, cfg.AbsRootDir, imageFilterBuilder, commitPipeline)
 	defer sessionCleanup()
 
 	// 系统处理 GraphQL mutation (用户的写入交互行为) 起，在设定的闲置时间内阻止系统休眠，避免在其他设备使用时本机休眠断开连接

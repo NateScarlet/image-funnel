@@ -213,8 +213,7 @@ func newNextRoundTestService(t *testing.T, sessionRepo *FakeSessionRepo, metaRep
 		saved,
 		imgRepo.BaseDir,
 		image.NewFilterBuilder(),
-		&FakeHookRunner{},
-		NullSampleRecorder{},
+		newNullPipeline(),
 	)
 	return svc, cleanup
 }

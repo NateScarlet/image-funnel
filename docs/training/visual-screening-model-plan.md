@@ -6,7 +6,7 @@
 
 因此在一期把标注在流失前蒸馏为轻量、可长期留存的训练样本，并明确训练对象。**本文件只覆盖采集与计划，不训练模型本身。**
 
-采集位置是主应用 `Service.Commit`，不是 `post_commit_session` 钩子：钩子只拿到目录相对路径、GraphQL `Image` 不暴露 `action`、rating 未变时 commit 直接跳过写盘、且钩子是 `go run(...)` fire-and-forget，失败只记日志，丢一次就永久缺一个负例。
+决策事实在主应用 `Service.Commit` 同步捕获，不是 `post_commit_session` 钩子：钩子只拿到目录相对路径、GraphQL `Image` 不暴露 `action`、rating 未变时 commit 直接跳过写盘、且钩子是 `go run(...)` fire-and-forget，失败只记日志，丢一次就永久缺一个负例。缩略图生成与落盘由服务端持有的后台流水线在提交返回后完成。
 
 ## 2. 数据规范
 
@@ -14,8 +14,9 @@
 
 - 每条实际产生的标记决策（含 rating 未变、仍被用户决策过的图片）产生一条事件。
 - 文件不存在或 ID 不匹配（外部修改）的图片不产生事件。
-- `Service.Commit` 接收必传的 `SampleRecorder`；未启用归档时注入空实现 `NullSampleRecorder`，提交行为与现状完全一致。
-- 归档失败通过 Commit 返回的错误向调用者可见，不 fire-and-forget、不只记日志；XMP 作为唯一真相源的写入不被阻断。
+- `Service.Commit` 只同步完成评级 XMP 写入、元数据更新事件与 session-saved 发布，然后立即返回；采样与提交后钩子都不在返回路径上。它向服务端持有的后台流水线非阻塞登记本次提交的全部决策，归档开启时注入异步流水线、关闭时注入不创建后台任务的空实现，提交行为与现状一致。
+- 后台任务按「先采样、后钩子」顺序执行：钩子可能把源图移走或删除，抢先执行会让采样拿不到原图。图片 ID 带版本、文件不会被原地修改，采样阶段直接从提交时捕获的 `SourcePath` 读原图，无需在提交同步阶段固化缩略图字节。
+- 采样失败按 fire-and-forget 处理：单条失败（缩略图生成 / CAS / JSONL 任一失败）只记 zap 日志，不使 Commit 失败、不中断后续样本、不阻止钩子触发；XMP 作为唯一真相源的写入不被阻断。
 
 ### 2.2 事件字段
 
@@ -35,7 +36,7 @@
 
 ### 2.3 缩略图内容寻址布局
 
-- 提交当下从原图生成固定 **224×224 居中裁剪 WebP** 缩略图（质量 75，数 KB 级），写入独立持久目录，不依赖会过期的变体缓存。
+- 后台采样阶段从原图生成固定 **224×224 居中裁剪 WebP** 缩略图（质量 75，数 KB 级），写入独立持久目录，不依赖会过期的变体缓存。
 - CID 计算：SHA-256 摘要 → CIDv1（version 1 / codec raw 0x55 / sha2-256 multihash 0x12）→ base32 大写无填充，首字符为多基前缀 `B`。
 - 令 `h = CID` 去掉首字符 `B`；分片目录取 `h` 的倒数第 3、2 位；文件路径为 `<DataDir>/training-samples/cas/<分片>/<h>.data`。
 - 分片布局与用户其它 IPFS 兼容 CAS 项目（如 `obsidian-content-addressed-attachments` 的 `formatRelPath`）一致，便于跨项目共用工具。
@@ -74,4 +75,4 @@
 
 - 环境变量 `IMAGE_FUNNEL_ENABLE_TRAINING_SAMPLE_ARCHIVE=true` 开启；未设置、无效值或 `false` 均关闭（零值安全）。
 - 开启后启动时创建 `<DataDir>/training-samples/cas/` 与 `<DataDir>/training-samples/samples.jsonl`；日志会打印解析后的数据目录绝对路径。
-- 失败可见：缩略图生成、CAS 写入、JSONL 追加任一失败都会使 `Service.Commit` 返回错误。
+- 失败处理：缩略图生成、CAS 写入、JSONL 追加任一失败只记录 zap 日志（后台 fire-and-forget），不会使 `Service.Commit` 返回错误；单条失败不中断其余样本，也不阻止「采样后」的提交后钩子。

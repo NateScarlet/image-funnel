@@ -14,7 +14,7 @@ const (
 	thumbnailQuality = 75
 )
 
-// MagickThumbnailer 用 ImageMagick 在提交当下生成固定 224×224 的居中裁剪 WebP 缩略图。
+// MagickThumbnailer 用 ImageMagick 在后台采样阶段生成固定 224×224 的居中裁剪 WebP 缩略图。
 // 缩略图写入独立持久目录，不依赖会过期的变体缓存。
 type MagickThumbnailer struct {
 	sem *semaphore.Weighted

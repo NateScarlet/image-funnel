@@ -115,8 +115,7 @@ func newFileChangeTestService(t *testing.T, rootDir, relPath string) (*Session, 
 		saved,
 		rootDir,
 		image.NewFilterBuilder(),
-		&FakeHookRunner{},
-		NullSampleRecorder{},
+		newNullPipeline(),
 	)
 	t.Cleanup(cleanup)
 	return sess, svc, saved.ids
