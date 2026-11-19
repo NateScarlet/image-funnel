@@ -15,6 +15,9 @@ import (
 	_ "golang.org/x/image/webp"
 
 	"main/internal/infrastructure/samplearchive"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func createImage(t *testing.T, dir, name, size string, draw ...string) string {
@@ -45,7 +48,7 @@ func TestMagickSampleGenerator_DifferentResolution_UsesWholeImages(t *testing.T)
 	candidate := createImage(t, dir, "candidate.png", "300x200", "-fill", "red", "-draw", "rectangle 0,0 299,199")
 	baseline := createImage(t, dir, "baseline.png", "100x100", "-fill", "blue", "-draw", "rectangle 0,0 99,99")
 
-	gen := samplearchive.NewMagickSampleGenerator(dir, 1)
+	gen := samplearchive.NewMagickSampleGenerator(dir, 1, zap.NewNop())
 	candidateCID, baselineCIDs, err := gen.Generate(context.Background(), candidate, []string{baseline})
 	require.NoError(t, err)
 	require.Len(t, baselineCIDs, 1)
@@ -73,7 +76,7 @@ func TestMagickSampleGenerator_DifferentResolution_KeepsWholeImageEdges(t *testi
 	)
 	baseline := createImage(t, dir, "baseline.png", "100x100")
 
-	gen := samplearchive.NewMagickSampleGenerator(dir, 1)
+	gen := samplearchive.NewMagickSampleGenerator(dir, 1, zap.NewNop())
 	candidateCID, _, err := gen.Generate(context.Background(), candidate, []string{baseline})
 	require.NoError(t, err)
 
@@ -90,7 +93,7 @@ func TestMagickSampleGenerator_SameResolution_CropsDiffUnionWithSharedCoordinate
 	candidate := createImage(t, dir, "candidate.png", "100x100", "-fill", "red", "-draw", "rectangle 10,10 19,19")
 	baseline := createImage(t, dir, "baseline.png", "100x100", "-fill", "red", "-draw", "rectangle 60,60 69,69")
 
-	gen := samplearchive.NewMagickSampleGenerator(dir, 1)
+	gen := samplearchive.NewMagickSampleGenerator(dir, 1, zap.NewNop())
 	candidateCID, baselineCIDs, err := gen.Generate(context.Background(), candidate, []string{baseline})
 	require.NoError(t, err)
 
@@ -116,7 +119,7 @@ func TestMagickSampleGenerator_CachesCIDByImageAndRegion(t *testing.T) {
 	candidate := createImage(t, dir, "candidate.png", "100x100")
 	baseline := createImage(t, dir, "baseline.png", "100x100", "-fill", "red", "-draw", "rectangle 10,10 19,19")
 
-	gen := samplearchive.NewMagickSampleGenerator(dir, 1)
+	gen := samplearchive.NewMagickSampleGenerator(dir, 1, zap.NewNop())
 	candidateCID, baselineCIDs, err := gen.Generate(context.Background(), candidate, []string{baseline})
 	require.NoError(t, err)
 
@@ -146,4 +149,37 @@ func isBlue(c color.Color) bool {
 func isWhite(c color.Color) bool {
 	r, g, b, _ := c.RGBA()
 	return r > 0xd000 && g > 0xd000 && b > 0xd000
+}
+
+func TestMagickSampleGenerator_LogsStageDurationsAndCacheHits(t *testing.T) {
+	dir := t.TempDir()
+	candidate := createImage(t, dir, "candidate.png", "100x100")
+	baseline := createImage(t, dir, "baseline.png", "100x100", "-fill", "red", "-draw", "rectangle 10,10 19,19")
+
+	core, logs := observer.New(zap.DebugLevel)
+	gen := samplearchive.NewMagickSampleGenerator(dir, 1, zap.New(core))
+	_, _, err := gen.Generate(context.Background(), candidate, []string{baseline})
+	require.NoError(t, err)
+
+	for _, msg := range []string{
+		"did generate sample patch set",
+		"did read candidate dimensions",
+		"did run magick identify",
+		"did resolve sample region",
+		"did compute sample diff rect",
+		"did render sample patch",
+		"did run magick render",
+		"did store sample patch in CAS",
+	} {
+		entries := logs.FilterMessage(msg).All()
+		require.NotEmpty(t, entries, "缺少阶段日志 %s", msg)
+		for _, entry := range entries {
+			assert.Contains(t, entry.ContextMap(), "duration", "阶段日志 %s 应带 duration 字段", msg)
+		}
+	}
+
+	// 第二次生成同一组图：编码命中缓存，不应再次走 magick render
+	_, _, err = gen.Generate(context.Background(), candidate, []string{baseline})
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, logs.FilterMessage("sample patch cache hit").Len(), 2)
 }

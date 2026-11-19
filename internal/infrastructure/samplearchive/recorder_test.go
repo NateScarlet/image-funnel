@@ -17,6 +17,9 @@ import (
 	"main/internal/scalar"
 	"main/internal/shared"
 	"main/internal/testutil"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // fakeSampleImageGenerator 只验证 Recorder 传给端口的路径与写出的引用，不做图像计算。
@@ -43,7 +46,7 @@ func (f *fakePromptReader) Prompt(string) []byte { return f.data }
 func newTestRecorder(t *testing.T, generator samplearchive.SampleImageGenerator) (*samplearchive.Recorder, string) {
 	t.Helper()
 	dataRoot := t.TempDir()
-	recorder, err := samplearchive.NewRecorder(dataRoot, dataRoot, generator, &fakePromptReader{data: []byte(`{"prompt":"hello"}`)})
+	recorder, err := samplearchive.NewRecorder(dataRoot, dataRoot, generator, &fakePromptReader{data: []byte(`{"prompt":"hello"}`)}, zap.NewNop())
 	require.NoError(t, err)
 	return recorder, dataRoot
 }
@@ -146,6 +149,33 @@ func TestRecorder_Record_GeneratorErrorPropagatesWithoutAppending(t *testing.T) 
 	assert.Contains(t, err.Error(), "magick failed")
 	_, statErr := os.Stat(filepath.Join(dataRoot, "samples.jsonl"))
 	assert.True(t, os.IsNotExist(statErr))
+}
+
+func TestRecorder_Record_LogsStageDurations(t *testing.T) {
+	core, logs := observer.New(zap.DebugLevel)
+	dataRoot := t.TempDir()
+	recorder, err := samplearchive.NewRecorder(dataRoot, dataRoot,
+		&fakeSampleImageGenerator{candidateCID: "B-candidate"},
+		&fakePromptReader{}, zap.New(core),
+	)
+	require.NoError(t, err)
+
+	require.NoError(t, recorder.Record(context.Background(), &session.Sample{
+		ImageID:       scalar.ToID("img-1"),
+		Action:        shared.ImageActionKeep,
+		SourceRelPath: testutil.Rel(t, "source.png"),
+	}))
+
+	for _, msg := range []string{
+		"did generate sample images",
+		"did read prompt and compute fingerprint",
+		"did append training sample log",
+		"did record training sample in archive",
+	} {
+		entries := logs.FilterMessage(msg).All()
+		require.Len(t, entries, 1, "缺少阶段日志 %s", msg)
+		assert.Contains(t, entries[0].ContextMap(), "duration", "阶段日志 %s 应带 duration 字段", msg)
+	}
 }
 
 func splitLines(content string) []string {

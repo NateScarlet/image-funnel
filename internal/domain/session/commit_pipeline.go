@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"sync"
+	"time"
 
 	"main/internal/domain/hook"
 	"main/internal/scalar"
@@ -60,23 +61,58 @@ func (p *AsyncCommitPipeline) Enqueue(samples []*Sample, directoryID scalar.ID) 
 }
 
 func (p *AsyncCommitPipeline) run(samples []*Sample, directoryID scalar.ID) {
+	// 调试用逐层耗时日志：定位「采样阶段拖慢钩子」时，整条任务 → 采样阶段 → 单条样本 →
+	// 目录解析 → 钩子触发的耗时分布；均为 Debug 级，仅在 dev 构建可见。
+	taskStart := time.Now()
+	p.logger.Debug("will process commit session pipeline",
+		zap.Stringer("directoryID", directoryID),
+		zap.Int("samples", len(samples)),
+	)
+	defer func() {
+		p.logger.Debug("did process commit session pipeline",
+			zap.Duration("duration", time.Since(taskStart)),
+			zap.Stringer("directoryID", directoryID),
+			zap.Int("samples", len(samples)),
+		)
+	}()
+
 	// 采样阶段：图片 ID 带版本，文件不会被原地修改；按 Mark 当下捕获的相对路径在后台解析出绝对路径读原图
-	for _, sample := range samples {
+	samplingStart := time.Now()
+	for i, sample := range samples {
 		if p.ctx.Err() != nil {
 			return
 		}
-		if err := p.recorder.Record(p.ctx, sample); err != nil {
+		recordStart := time.Now()
+		err := p.recorder.Record(p.ctx, sample)
+		p.logger.Debug("did record training sample",
+			zap.Duration("duration", time.Since(recordStart)),
+			zap.Int("index", i),
+			zap.Stringer("imageID", sample.ImageID),
+			zap.Int("baselines", len(sample.Baselines)),
+			zap.Error(err),
+		)
+		if err != nil {
 			p.logger.Error("failed to archive training sample",
 				zap.Stringer("imageID", sample.ImageID),
 				zap.Error(err),
 			)
 		}
 	}
+	p.logger.Debug("did sample training samples phase",
+		zap.Duration("duration", time.Since(samplingStart)),
+		zap.Int("count", len(samples)),
+	)
 	if p.ctx.Err() != nil {
 		return
 	}
 
+	resolveStart := time.Now()
 	dir, err := p.directoryResolver.GetDirectory(p.ctx, directoryID)
+	p.logger.Debug("did resolve commit hook directory",
+		zap.Duration("duration", time.Since(resolveStart)),
+		zap.Stringer("directoryID", directoryID),
+		zap.Error(err),
+	)
 	if err != nil || dir == nil {
 		p.logger.Error("failed to resolve directory for post commit session hook",
 			zap.Stringer("directoryID", directoryID),
@@ -84,7 +120,14 @@ func (p *AsyncCommitPipeline) run(samples []*Sample, directoryID scalar.ID) {
 		)
 		return
 	}
-	if err := p.hookRunner.OnCommitSession(p.ctx, dir.RelPath()); err != nil {
+	hookStart := time.Now()
+	err = p.hookRunner.OnCommitSession(p.ctx, dir.RelPath())
+	p.logger.Debug("did trigger post commit session hook",
+		zap.Duration("duration", time.Since(hookStart)),
+		zap.Stringer("directoryID", directoryID),
+		zap.Error(err),
+	)
+	if err != nil {
 		p.logger.Error("failed to trigger post commit session hook", zap.Error(err))
 	}
 }

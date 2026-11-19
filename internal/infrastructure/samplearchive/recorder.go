@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"main/internal/domain/session"
+
+	"go.uber.org/zap"
 )
 
 // SampleImageGenerator 在后台从候选原图与基准原图生成一组 224² 块，各自按 CID 落盘，
@@ -47,12 +49,13 @@ type Recorder struct {
 	prompts   PromptReader
 	logPath   string
 	baseDir   string
+	logger    *zap.Logger
 	mu        sync.Mutex
 }
 
 // NewRecorder 在 dataRoot 下建立 samples.jsonl；baseDir 用于把样本中的根相对路径解析为绝对路径。
 // dataRoot 由装配方给定为 <DataDir>/training-samples-v2。
-func NewRecorder(dataRoot string, baseDir string, generator SampleImageGenerator, prompts PromptReader) (*Recorder, error) {
+func NewRecorder(dataRoot string, baseDir string, generator SampleImageGenerator, prompts PromptReader, logger *zap.Logger) (*Recorder, error) {
 	if err := os.MkdirAll(dataRoot, 0o755); err != nil {
 		return nil, fmt.Errorf("create sample archive directory: %w", err)
 	}
@@ -61,11 +64,22 @@ func NewRecorder(dataRoot string, baseDir string, generator SampleImageGenerator
 		prompts:   prompts,
 		logPath:   filepath.Join(dataRoot, "samples.jsonl"),
 		baseDir:   baseDir,
+		logger:    logger,
 	}, nil
 }
 
 // Record 生成候选块与基准块、按 CID 去重落盘并追加一条 JSONL 记录；任何失败都返回给调用者。
+// 各阶段耗时以 Debug 级记录，便于定位采样缓慢的具体来源。
 func (r *Recorder) Record(ctx context.Context, sample *session.Sample) error {
+	stageStart := time.Now()
+	defer func() {
+		r.logger.Debug("did record training sample in archive",
+			zap.Duration("duration", time.Since(stageStart)),
+			zap.Stringer("imageID", sample.ImageID),
+			zap.Int("baselines", len(sample.Baselines)),
+		)
+	}()
+
 	baselinePaths := make([]string, 0, len(sample.Baselines))
 	baselineIDs := make([]string, 0, len(sample.Baselines))
 	for _, baseline := range sample.Baselines {
@@ -73,7 +87,15 @@ func (r *Recorder) Record(ctx context.Context, sample *session.Sample) error {
 		baselineIDs = append(baselineIDs, baseline.ID.String())
 	}
 
-	candidateCID, baselineCIDs, err := r.generator.Generate(ctx, sample.SourceRelPath.Abs(r.baseDir), baselinePaths)
+	sourcePath := sample.SourceRelPath.Abs(r.baseDir)
+	generateStart := time.Now()
+	candidateCID, baselineCIDs, err := r.generator.Generate(ctx, sourcePath, baselinePaths)
+	r.logger.Debug("did generate sample images",
+		zap.Duration("duration", time.Since(generateStart)),
+		zap.Stringer("imageID", sample.ImageID),
+		zap.Int("baselines", len(baselinePaths)),
+		zap.Error(err),
+	)
 	if err != nil {
 		return fmt.Errorf("generate training sample images: %w", err)
 	}
@@ -82,8 +104,13 @@ func (r *Recorder) Record(ctx context.Context, sample *session.Sample) error {
 		baselineCIDs = make([]string, 0)
 	}
 
-	// 指纹降级为辅助元数据，不再作为切分主键
-	fingerprint := Fingerprint(r.prompts.Prompt(sample.SourceRelPath.Abs(r.baseDir)))
+	// 指纹降级为辅助元数据，不再作为切分主键；PNG 元数据读取可能很慢，单独计时。
+	fingerprintStart := time.Now()
+	fingerprint := Fingerprint(r.prompts.Prompt(sourcePath))
+	r.logger.Debug("did read prompt and compute fingerprint",
+		zap.Duration("duration", time.Since(fingerprintStart)),
+		zap.Stringer("imageID", sample.ImageID),
+	)
 
 	line, err := json.Marshal(Record{
 		ImageID:          sample.ImageID.String(),
@@ -101,6 +128,7 @@ func (r *Recorder) Record(ctx context.Context, sample *session.Sample) error {
 		return fmt.Errorf("encode training sample: %w", err)
 	}
 
+	appendStart := time.Now()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if err := func() error {
@@ -114,6 +142,10 @@ func (r *Recorder) Record(ctx context.Context, sample *session.Sample) error {
 	}(); err != nil {
 		return fmt.Errorf("append training sample log: %w", err)
 	}
+	r.logger.Debug("did append training sample log",
+		zap.Duration("duration", time.Since(appendStart)),
+		zap.Stringer("imageID", sample.ImageID),
+	)
 	return nil
 }
 

@@ -372,3 +372,44 @@ func TestCommit_WhenArchiveEnabled_UsesServerHeldContext(t *testing.T) {
 	assert.False(t, secondRecorded.Load(), "服务端 ctx 取消后不应再采样")
 	assert.False(t, secondHook.Load(), "服务端 ctx 取消后不应再触发钩子")
 }
+
+func TestCommit_WhenArchiveEnabled_LogsStageDurationsForSamplingAndHook(t *testing.T) {
+	tempDir := t.TempDir()
+	core, logs := observer.New(zap.DebugLevel)
+
+	hookFired := make(chan struct{})
+	hook := &FakeHookRunner{OnCommitSessionFunc: func(relpath.Path) error {
+		close(hookFired)
+		return nil
+	}}
+	pipeline := NewAsyncCommitPipeline(context.Background(), &FakeSampleRecorder{}, hook, &FakeDirectoryResolver{}, zap.New(core))
+	env := setupPipelineEnv(t, pipeline, tempDir)
+	defer env.cleanup()
+
+	img := addMarkedImage(t, env, tempDir, "1", "test1.jpg", 0, shared.ImageActionKeep)
+	sess := sessionOf(env, img)
+	require.NoError(t, sess.MarkImage(img.ID(), shared.ImageActionKeep))
+	_, _, err := env.svc.Commit(context.Background(), sess, &shared.WriteActions{KeepRating: ptr(5)})
+	require.NoError(t, err)
+	waitFor(t, hookFired, "hook never fired")
+
+	// 总耗时日志由 defer 写入，晚于钩子触发，等待其落盘后再断言
+	require.Eventually(t, func() bool {
+		return logs.FilterMessage("did process commit session pipeline").Len() == 1
+	}, time.Second, 10*time.Millisecond)
+
+	for _, msg := range []string{
+		"will process commit session pipeline",
+		"did record training sample",
+		"did sample training samples phase",
+		"did resolve commit hook directory",
+		"did trigger post commit session hook",
+		"did process commit session pipeline",
+	} {
+		entries := logs.FilterMessage(msg).All()
+		require.Len(t, entries, 1, "缺少阶段日志 %s", msg)
+		if msg != "will process commit session pipeline" {
+			assert.Contains(t, entries[0].ContextMap(), "duration", "阶段日志 %s 应带 duration 字段", msg)
+		}
+	}
+}

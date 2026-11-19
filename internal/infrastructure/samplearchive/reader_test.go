@@ -14,6 +14,8 @@ import (
 	"main/internal/infrastructure/samplearchive"
 	"main/internal/scalar"
 	"main/internal/shared"
+
+	"go.uber.org/zap"
 )
 
 func TestReadRecords_ReturnsEveryEvent(t *testing.T) {
@@ -21,6 +23,7 @@ func TestReadRecords_ReturnsEveryEvent(t *testing.T) {
 	recorder, err := samplearchive.NewRecorder(dataRoot, dataRoot,
 		&fakeSampleImageGenerator{candidateCID: "B-candidate", baselineCIDs: []string{"B-base"}},
 		&fakePromptReader{},
+		zap.NewNop(),
 	)
 	require.NoError(t, err)
 	for i := range 3 {

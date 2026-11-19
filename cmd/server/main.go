@@ -261,8 +261,9 @@ func main() {
 			logger.Fatal("failed to resolve training sample data directory", zap.Error(err))
 		}
 		recorder, err := samplearchive.NewRecorder(dataRoot, cfg.AbsRootDir,
-			samplearchive.NewMagickSampleGenerator(dataRoot, cfg.MagickConcurrency),
+			samplearchive.NewMagickSampleGenerator(dataRoot, cfg.MagickConcurrency, logger),
 			samplearchive.PNGPromptReader{},
+			logger,
 		)
 		if err != nil {
 			logger.Fatal("failed to initialize training sample archive", zap.Error(err))
