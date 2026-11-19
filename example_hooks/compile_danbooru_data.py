@@ -5,7 +5,7 @@
 # dependencies = [
 #   "numpy",
 #   "pyarrow",
-#   "httpx",
+#   "httpx2",
 # ]
 # ///
 """将外部项目源数据（tags CSV + 共现 parquet）编译为补全运行时产物。

@@ -142,7 +142,7 @@ class TestPostJson(unittest.TestCase):
         self.assertIsInstance(errors[0], HttpCanceledError)
 
     def test_cancel_between_registration_and_send_raises_canceled_error(self) -> None:
-        """注册清理动作与发起请求之间被取消：报取消而不是 httpx 的 RuntimeError。"""
+        """注册清理动作与发起请求之间被取消：报取消而不是 httpx2 的 RuntimeError。"""
         token = _CancelOnRegistration()
         with _stub_server(_RecordingHandler) as url:
             with self.assertRaises(HttpCanceledError):

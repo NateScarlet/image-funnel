@@ -344,13 +344,6 @@ class TestServeCancelIntegration(unittest.TestCase):
             env = {
                 "IMAGE_FUNNEL_DATA_DIR": data_dir,
                 "DANBOORU_SEARCH_URL": f"http://{host}:{port}",
-                # 本机桩服务不应经由环境代理：httpx 默认读取 NO_PROXY，
-                # 其中形如 [::1] 的条目会让它解析代理绕过列表时抛 InvalidURL，
-                # 导致在途请求根本没发出。测试内显式清空，与外网代理配置解耦。
-                "HTTP_PROXY": "",
-                "HTTPS_PROXY": "",
-                "ALL_PROXY": "",
-                "NO_PROXY": "",
             }
             with patch.dict(os.environ, env):
                 os.environ.pop("DANBOORU_DATA_DIR", None)

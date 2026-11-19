@@ -1,18 +1,19 @@
 # -*- coding: utf-8 -*-
 """可取消的同步 JSON HTTP 调用：常驻补全（serve）路径的网络出口。
 
-同步 `requests` 的阻塞调用无法从另一线程干净中断，因此这里的客户端用 httpx，
+同步 `requests` 的阻塞调用无法从另一线程干净中断，因此这里的客户端用 httpx2
+（API 与原库兼容，且能正确解析 NO_PROXY 中的方括号 IPv6 条目），
 并把「关闭客户端」注册到取消令牌上：取消时由取消线程关闭客户端，令在途请求
 立刻抛错退出。取消只保证「不再需要该结果」，不承诺打断任意阻塞调用（ADR 0011）。
 
-不向上暴露 httpx 类型：调用方只看到 HttpError / HttpCanceledError。
+不向上暴露 httpx2 类型：调用方只看到 HttpError / HttpCanceledError。
 """
 
 from __future__ import annotations
 
 from typing import Any, Mapping, Optional
 
-import httpx
+import httpx2
 
 from .cancellation import CancelToken
 
@@ -45,7 +46,7 @@ def post_json(
     """
     if cancel_token.is_canceled():
         raise HttpCanceledError("请求已取消，未发起网络请求")
-    with httpx.Client() as client:
+    with httpx2.Client() as client:
         # 网络层自行注册中止手段，令牌不感知具体 HTTP 库类型
         cancel_token.on_cancel(client.close)
         try:
@@ -54,14 +55,14 @@ def post_json(
             )
             response.raise_for_status()
             return response.json()
-        except httpx.HTTPError as e:
+        except httpx2.HTTPError as e:
             # 客户端被取消线程关闭时，在途请求以传输错误（如 ReadError）结束
             if cancel_token.is_canceled():
                 raise HttpCanceledError("请求已取消，在途请求已被掐断") from e
             raise HttpError(f"HTTP 请求失败: {e}") from e
         except RuntimeError as e:
             # 注册清理动作与发起请求之间收到取消：客户端已被取消线程关闭，
-            # httpx 拒绝在已关闭的客户端上发请求（抛 RuntimeError 而非 HTTPError）
+            # httpx2 拒绝在已关闭的客户端上发请求（抛 RuntimeError 而非 HTTPError）
             if cancel_token.is_canceled():
                 raise HttpCanceledError("请求已取消，未发起网络请求") from e
             raise
