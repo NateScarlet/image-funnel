@@ -260,15 +260,18 @@ func main() {
 		if err != nil {
 			logger.Fatal("failed to resolve training sample data directory", zap.Error(err))
 		}
+		// 采样与钩子共用一个点名 logger：设置 IMAGE_FUNNEL_DEBUG_LOGGERS=commit-pipeline
+		// 即可通过通用机制只打开这条流水线的 Debug 耗时日志，不影响其它 logger。
+		pipelineLogger := logger.Named(commitPipelineLoggerName)
 		recorder, err := samplearchive.NewRecorder(dataRoot, cfg.AbsRootDir,
-			samplearchive.NewMagickSampleGenerator(dataRoot, cfg.MagickConcurrency, logger),
+			samplearchive.NewMagickSampleGenerator(dataRoot, cfg.MagickConcurrency, pipelineLogger),
 			samplearchive.PNGPromptReader{},
-			logger,
+			pipelineLogger,
 		)
 		if err != nil {
 			logger.Fatal("failed to initialize training sample archive", zap.Error(err))
 		}
-		asyncPipeline := session.NewAsyncCommitPipeline(pipelineCtx, recorder, hookRunner, dirSvc, logger)
+		asyncPipeline := session.NewAsyncCommitPipeline(pipelineCtx, recorder, hookRunner, dirSvc, pipelineLogger)
 		commitPipeline = asyncPipeline
 		waitPipeline = asyncPipeline.Wait
 		logger.Info("training sample archive enabled", zap.String("path", dataRoot))
