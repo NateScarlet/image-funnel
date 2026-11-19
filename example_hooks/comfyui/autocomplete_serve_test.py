@@ -344,6 +344,13 @@ class TestServeCancelIntegration(unittest.TestCase):
             env = {
                 "IMAGE_FUNNEL_DATA_DIR": data_dir,
                 "DANBOORU_SEARCH_URL": f"http://{host}:{port}",
+                # 本机桩服务不应经由环境代理：httpx 默认读取 NO_PROXY，
+                # 其中形如 [::1] 的条目会让它解析代理绕过列表时抛 InvalidURL，
+                # 导致在途请求根本没发出。测试内显式清空，与外网代理配置解耦。
+                "HTTP_PROXY": "",
+                "HTTPS_PROXY": "",
+                "ALL_PROXY": "",
+                "NO_PROXY": "",
             }
             with patch.dict(os.environ, env):
                 os.environ.pop("DANBOORU_DATA_DIR", None)
@@ -380,10 +387,15 @@ class TestServeCancelIntegration(unittest.TestCase):
                     elapsed = time.monotonic() - start
                 finally:
                     sys.stdin, sys.stdout = old_stdin, old_stdout
-                    reader.close()
+                    # 断言失败时上面的 writer.close() 不会执行：必须先关写端让 serve
+                    # 的读循环收到 EOF，再释放桩服务并等待 serve 收尾，最后才关读端。
+                    # 否则 serve 仍持有读锁时 close() 会与之互等，把一次失败变成永久挂起。
+                    writer.close()
                     _BlockingSearchHandler.release.set()
+                    serve_thread.join(timeout=2)
                     server.shutdown()
                     server.server_close()
+                    reader.close()
 
         self.assertFalse(serve_thread.is_alive(), "取消后 serve 应已退出")
         self.assertLess(
