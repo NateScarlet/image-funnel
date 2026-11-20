@@ -1,5 +1,50 @@
 # Changelog
 
+## [1.10.0](https://github.com/NateScarlet/image-funnel/compare/v1.9.0...v1.10.0) (2026-11-20)
+
+
+### Features
+
+* add load latency attribution for image screening ([26614ea](https://github.com/NateScarlet/image-funnel/commit/26614eac7aeca401ee49715be0dd4f1b96a14790)), closes [#180](https://github.com/NateScarlet/image-funnel/issues/180)
+* **example-hooks/branch:** append danbooru tags to /branch completion ([45bf8d7](https://github.com/NateScarlet/image-funnel/commit/45bf8d761ef5717af4e7ed15367fc0d89535179c)), closes [#171](https://github.com/NateScarlet/image-funnel/issues/171)
+* **example-hooks/comfyui:** add --branch flag to /remix ([aa80ba3](https://github.com/NateScarlet/image-funnel/commit/aa80ba32c2ffa270de6f5c9e2cc280d9c27bf08c)), closes [#168](https://github.com/NateScarlet/image-funnel/issues/168)
+* **example-hooks/comfyui:** complete --branch values from same-directive --add tags ([2f19e18](https://github.com/NateScarlet/image-funnel/commit/2f19e187c3828a9d48d3afe0edd416768544f290)), closes [#178](https://github.com/NateScarlet/image-funnel/issues/178)
+* **example-hooks/comfyui:** insert --add tags at the uniquely removed line ([ceacd84](https://github.com/NateScarlet/image-funnel/commit/ceacd84c381176e26f6557ad93ed526aaef17d64)), closes [#169](https://github.com/NateScarlet/image-funnel/issues/169)
+* **example-hooks/comfyui:** rank positive and negative regions first in autocomplete ([192925b](https://github.com/NateScarlet/image-funnel/commit/192925b01eb336d4197aaf1e11499527bb2fd416)), closes [#167](https://github.com/NateScarlet/image-funnel/issues/167)
+* **example-hooks/comfyui:** support processing only the current image in remix ([d960578](https://github.com/NateScarlet/image-funnel/commit/d960578e52deb74a0f8a63c705760cddbd018256)), closes [#173](https://github.com/NateScarlet/image-funnel/issues/173)
+* **frontend:** hint round changes by tinting the session backgrounds ([42f5dab](https://github.com/NateScarlet/image-funnel/commit/42f5dab9ed2c71839d5cb5ae454fe79098e7a4de)), closes [#163](https://github.com/NateScarlet/image-funnel/issues/163)
+* **http:** converge oversized width requests to canonical URL ([8f02add](https://github.com/NateScarlet/image-funnel/commit/8f02adda17f188f5631b101f799bb94416b551ce)), closes [#172](https://github.com/NateScarlet/image-funnel/issues/172)
+* **image:** redirect full-size requests to raw URL and blind-sign width ([ce6a2b5](https://github.com/NateScarlet/image-funnel/commit/ce6a2b5eb3a6dea781156ccbfb7d38515de01e67)), closes [#128](https://github.com/NateScarlet/image-funnel/issues/128)
+* **sample-archive:** capture baseline sets at mark time and archive v2 sample patches ([4b3840e](https://github.com/NateScarlet/image-funnel/commit/4b3840e5d3e4eee46745c4914554b048d6738e28)), closes [#187](https://github.com/NateScarlet/image-funnel/issues/187)
+* **session:** capture content-addressed training samples on commit ([9384b7d](https://github.com/NateScarlet/image-funnel/commit/9384b7d425d6f1883cb1c41348f3813eb75ca8ce)), closes [#183](https://github.com/NateScarlet/image-funnel/issues/183)
+
+
+### Bug Fixes
+
+* **example-hooks/comfyui:** should not accumulate previous output directories in filename prefix ([d41c9b1](https://github.com/NateScarlet/image-funnel/commit/d41c9b1660b3257a2360b6f3605435bdf83efb15)), closes [#175](https://github.com/NateScarlet/image-funnel/issues/175)
+* **example-hooks/comfyui:** should not fail on bracketed IPv6 in NO_PROXY ([0e54151](https://github.com/NateScarlet/image-funnel/commit/0e54151da551b5dac03a8472aa8668e9ee081e4b))
+* **example-hooks/comfyui:** should not hang when serve cancel test meets malformed NO_PROXY ([71482d6](https://github.com/NateScarlet/image-funnel/commit/71482d6b35451ba696355620e409c9815bc0f3b7))
+* **example-hooks/comfyui:** should sync every node sharing a duplicated title when adjusting output directory ([91298b9](https://github.com/NateScarlet/image-funnel/commit/91298b9bbe23020a91ae21d564b2cf80ae47be71)), closes [#176](https://github.com/NateScarlet/image-funnel/issues/176)
+* **ffmpeg:** should pass -y and -nostdin to the AVIF probe command ([1ca5a54](https://github.com/NateScarlet/image-funnel/commit/1ca5a54d437c74a33d5b6276ac098e89c884fe90)), closes [#185](https://github.com/NateScarlet/image-funnel/issues/185)
+* **ffmpeg:** should preserve AVIF probe errors in fallback logs ([805d100](https://github.com/NateScarlet/image-funnel/commit/805d100ffe11595c57b9e2f60c3a5616c3abfd4c)), closes [#184](https://github.com/NateScarlet/image-funnel/issues/184)
+* **frontend:** should keep auto-navigation deterministic when stats change after commit ([cd77d97](https://github.com/NateScarlet/image-funnel/commit/cd77d9771c917c9d5830b14d314776523d561112)), closes [#162](https://github.com/NateScarlet/image-funnel/issues/162)
+* **frontend:** should mark date-segment unknown units invalid in Duration.parse ([9a1c48c](https://github.com/NateScarlet/image-funnel/commit/9a1c48c91b5b6ec8cff996c8492f6fe1ccc3817b)), closes [#181](https://github.com/NateScarlet/image-funnel/issues/181)
+* **frontend:** should not mark prior session images after a switch ([be3cb95](https://github.com/NateScarlet/image-funnel/commit/be3cb95dd2d01eec08d741a86573fc714630dd4d)), closes [#166](https://github.com/NateScarlet/image-funnel/issues/166)
+* **frontend:** should use jsdom localStorage in tests on Node 25+ ([71afceb](https://github.com/NateScarlet/image-funnel/commit/71afceb46297611be878c5c93d88f0bdcc4b6dcf))
+* **frontend:** should wait for the merged page to be visible before giving up auto-navigation ([4790e8f](https://github.com/NateScarlet/image-funnel/commit/4790e8f920e582eb47b42a822d3537d3dc871b6c)), closes [#170](https://github.com/NateScarlet/image-funnel/issues/170)
+* **hotkeys:** should not let enabled predicates bypass scope matching ([b8d2fd5](https://github.com/NateScarlet/image-funnel/commit/b8d2fd5ed063c7e97eacaeb3073e268c6bdbc668)), closes [#135](https://github.com/NateScarlet/image-funnel/issues/135)
+* **image:** should reject stale signed image urls ([9106f9e](https://github.com/NateScarlet/image-funnel/commit/9106f9e6cc10800257a86bba39e882321db647c1)), closes [#117](https://github.com/NateScarlet/image-funnel/issues/117)
+* **server:** should place training sample archive under DataDir ([0ad5d7f](https://github.com/NateScarlet/image-funnel/commit/0ad5d7f9f12dfa4de4523486e3b4a3938e336d53))
+* should keep note action controls below the editor so autocomplete cannot cover them ([00a0071](https://github.com/NateScarlet/image-funnel/commit/00a00710124f3c8f91df0f48d3d1a3e6f56e406e)), closes [#177](https://github.com/NateScarlet/image-funnel/issues/177)
+* should offer re-registering the current device right after it is deleted ([db43f62](https://github.com/NateScarlet/image-funnel/commit/db43f62e9060d31fffae1bda627fdc41b6c213bc))
+* should split autocomplete line context with the same shell rules as directive execution ([8c6da2d](https://github.com/NateScarlet/image-funnel/commit/8c6da2d2e0c83853ee96a2799a005d01ef2d9d9a)), closes [#179](https://github.com/NateScarlet/image-funnel/issues/179)
+
+
+### Performance Improvements
+
+* remove training-sample sampling from commit hook critical path ([8c1a30c](https://github.com/NateScarlet/image-funnel/commit/8c1a30c7d678a2450f2711e8e142cfcc3db5872d)), closes [#188](https://github.com/NateScarlet/image-funnel/issues/188)
+* **session:** return from commit before sampling and hooks ([3e46b70](https://github.com/NateScarlet/image-funnel/commit/3e46b705d0012de438daa1b82e161c3991c42b75)), closes [#186](https://github.com/NateScarlet/image-funnel/issues/186)
+
 ## [1.9.0](https://github.com/NateScarlet/image-funnel/compare/v1.8.0...v1.9.0) (2026-10-27)
 
 
