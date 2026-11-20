@@ -20,7 +20,7 @@
       <div
         class="bg-primary-800/50 rounded-2xl p-6 border border-primary-700/50 shadow-xl backdrop-blur-sm"
       >
-        <CommitForm ref="commitForm" :session title="" @committed="scheduleAutoNavigate">
+        <CommitForm ref="commitForm" :session title="" @committed="switchToNextDirectory">
           <template #actions="{ committing, commitResult, commit }">
             <button
               v-if="!commitResult"
@@ -38,7 +38,7 @@
               v-else
               class="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 rounded-lg font-bold transition-colors"
               type="button"
-              @click="handleCommitted"
+              @click="switchToNextDirectory"
             >
               完成
             </button>
@@ -114,38 +114,20 @@
 
 <script setup lang="ts">
 import { ref, useTemplateRef } from "vue";
-import { useRouter } from "vue-router";
 import { type SessionFragment } from "../graphql/generated";
 import CommitForm from "./CommitForm.vue";
 import DirectoryDisplay from "./DirectoryDisplay.vue";
 import KeptImagesGrid from "./KeptImagesGrid.vue";
 import { mdiUndo, mdiLoading, mdiAlertOutline } from "@mdi/js";
-import { useAutoCreateSession } from "../composables/useAutoCreateSession";
-import useNotification from "../composables/useNotification";
-import { CombinedGraphQLErrors, LinkError } from "@apollo/client/errors";
-import { isDirectoryPageWaitCancelled } from "../utils/directoryPageWaitCancelled";
-const { session, nextDirectoryId, resolveNextDirectory } = defineProps<{
+
+const { session, nextDirectoryId, switchToNextDirectory } = defineProps<{
   session: SessionFragment;
   nextDirectoryId: string | undefined;
-  resolveNextDirectory: () => Promise<string | undefined>;
+  /** 提交后切换的用例命令：延时、防重、决策、建会话、路由与错误分类由深 module 全权负责 */
+  switchToNextDirectory: () => void;
 }>();
 
 defineEmits<(e: "undo") => void>();
-
-const router = useRouter();
-const { showError } = useNotification();
-
-// 提交后使用 resolveNextDirectory 的返回值创建会话；props 更新到本组件前不能依赖其响应式刷新
-const targetDirectoryId = ref<string | undefined>();
-
-// 使用共享 composable 自动推导下一目录的配置并创建会话
-// CompletedView 仅合并 rating，不合并 label/query（保持原有行为）
-const { autoCreateSession } = useAutoCreateSession(
-  () => targetDirectoryId.value ?? "",
-  () => session.filter,
-  () => session.targetKeep,
-  { mergeAllFilterFields: false },
-);
 
 const commitForm = useTemplateRef<InstanceType<typeof CommitForm>>("commitForm");
 
@@ -176,50 +158,4 @@ function submit() {
 defineExpose({
   submit,
 });
-
-// 提交成功后的自动跳转：提交结果需先展示，跳转时机由本视图掌控
-function scheduleAutoNavigate() {
-  setTimeout(() => {
-    handleCommitted();
-  }, 500);
-}
-
-let navigating = false;
-
-async function handleCommitted() {
-  if (navigating) return;
-  navigating = true;
-
-  try {
-    // 提交完成后再决定目标：导航前补齐分页与统计信息，并按当前状态重新判定完成度
-    const nextDirectoryIdValue = await resolveNextDirectory();
-
-    if (nextDirectoryIdValue) {
-      targetDirectoryId.value = nextDirectoryIdValue;
-      const nextSession = await autoCreateSession();
-
-      // 创建下一会话没有返回结果同样是失败：必须提示并允许重试，不能停在完成视图且毫无反馈
-      if (!nextSession) throw new Error("无法创建下一个筛选会话");
-
-      await router.push({
-        name: "session",
-        params: {
-          id: nextSession.id,
-        },
-      });
-    } else {
-      await router.push("/");
-    }
-  } catch (error) {
-    // 释放导航锁允许用户重试
-    navigating = false;
-    // 取页等待被取消（切换目录/卸载）不是失败，静默中止，不打扰用户
-    if (isDirectoryPageWaitCancelled(error)) return;
-    // Apollo 请求错误已由全局 ErrorLink 提示；此处只补充未被其覆盖的本地错误，
-    // 否则「分页游标未推进」之类的失败会停留在完成视图且没有任何反馈
-    if (!CombinedGraphQLErrors.is(error) && !LinkError.is(error)) {
-      showError(error instanceof Error ? error.message : String(error));
-    }
-  }
-}
 </script>

@@ -178,7 +178,7 @@
             ref="completedView"
             :session="session"
             :next-directory-id="nextDirectoryId"
-            :resolve-next-directory="resolveNextDirectory"
+            :switch-to-next-directory="switchToNextDirectory"
             @undo="undo"
           />
         </template>
@@ -297,6 +297,7 @@ const { model: autoRejectTimeoutSeconds } = useStorage<number>(
 <script setup lang="ts">
 import "core-js/actual/disposable-stack";
 import { ref, computed, useTemplateRef, watch } from "vue";
+import { useRouter } from "vue-router";
 
 import mutate from "../graphql/utils/mutate";
 import { UndoDocument, ImageAction } from "../graphql/generated";
@@ -319,6 +320,11 @@ import { mdiCheckAll, mdiHome, mdiLoading } from "@mdi/js";
 import useFullscreenRendererElement from "@/composables/useFullscreenRendererElement";
 import useSession from "../composables/domain/useSession";
 import useSessionNextDirectory from "../composables/useSessionNextDirectory";
+import { useAutoCreateSession } from "../composables/useAutoCreateSession";
+import {
+  useAutoNavigateAfterCommit,
+  type CreateNextSessionInput,
+} from "../composables/useAutoNavigateAfterCommit";
 import useMarkImage from "@/composables/useMarkImage";
 import useNotification from "@/composables/useNotification";
 import useDisplayedImage, { type ImageLoadedEvent } from "@/composables/useDisplayedImage";
@@ -399,6 +405,36 @@ const { nextDirectoryId, resolveNextDirectory } = useSessionNextDirectory(
   () => sessionId.value,
   () => session.value?.directory,
 );
+
+// 在最外层构建「提交后切换」用例的依赖：决策来自导航 composable，
+// 建会话读取本次决策出的目标目录，路由与本地提示在此处注入，
+// 深 module 内部只编排顺序，不感知这些依赖的具体实现。
+const router = useRouter();
+const createInput = ref<CreateNextSessionInput>({
+  directoryId: "",
+  filter: {},
+  targetKeep: 0,
+});
+
+const { autoCreateSession } = useAutoCreateSession(
+  () => createInput.value.directoryId,
+  () => createInput.value.filter,
+  () => createInput.value.targetKeep,
+  { mergeAllFilterFields: false },
+);
+
+const { showError, show: showNotification, remove: removeNotification } = useNotification();
+const { switchToNextDirectory } = useAutoNavigateAfterCommit(() => session.value, {
+  resolveNextDirectory,
+  createSession: async ({ directoryId, filter, targetKeep }) => {
+    createInput.value = { directoryId, filter, targetKeep };
+    // 建会话 composable 返回 null 表示未创建成功，统一为 undefined 交给深 module 提示并解锁
+    return (await autoCreateSession()) ?? undefined;
+  },
+  navigateToSession: (id) => router.push({ name: "session", params: { id } }),
+  navigateHome: () => router.push("/"),
+  showLocalError: (message) => showError(message),
+});
 
 const currentImage = computed(() => session.value?.currentImage ?? undefined);
 
@@ -675,8 +711,6 @@ function handleCommit() {
     commitDialog.open();
   }
 }
-
-const { show: showNotification, remove: removeNotification } = useNotification();
 
 const canUndo = computed(() => session.value?.canUndo && !undoing.value);
 async function undo() {
