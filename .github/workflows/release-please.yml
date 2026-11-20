@@ -20,10 +20,15 @@ jobs:
         with:
           token: ${{ secrets.REPO_GITHUB_TOKEN }}
   build:
-    runs-on: ubuntu-latest
+    # chai2010/webp 的 WebP 编码走 cgo：使用原生 Windows runner 上预装的 MSYS2 gcc，
+    # 避免从 Linux 交叉编译时 apt 安装 mingw 的不稳定与 cgo 被禁用导致的符号缺失。
+    runs-on: windows-latest
     if: always()
     needs:
       - release-please
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -48,19 +53,30 @@ jobs:
           pnpm install
           pnpm run build
 
-      # chai2010/webp 的 WebP 编码走 cgo：从 Linux 交叉编译 Windows 时必须提供 Windows C 编译器，
-      # 否则 cgo 被禁用，webp C 符号未链接导致构建失败。
-      - name: Install MinGW-w64 cross compiler
+      # 原生 Windows runner 预装 MSYS2，定位其 gcc 供 cgo 使用；找不到时直接失败，
+      # 避免悄悄退回 CGO_ENABLED=0 导致 webp C 符号未链接。
+      - name: Locate C compiler for cgo
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-mingw-w64-x86-64
+          if command -v gcc >/dev/null 2>&1; then
+            echo "CC=$(command -v gcc)" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          for candidate in \
+            "C:/msys64/mingw64/bin/gcc.exe" \
+            "C:/msys64/ucrt64/bin/gcc.exe" \
+            "C:/msys64/mingw32/bin/gcc.exe" \
+            "C:/ProgramData/chocolatey/bin/gcc.exe"; do
+            if [ -f "$candidate" ]; then
+              echo "CC=$candidate" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          echo "No MSYS2 gcc found; cgo/WebP encoding cannot be built" >&2
+          exit 1
 
       - name: Build Backend (Windows)
         env:
-          GOOS: windows
-          GOARCH: amd64
           CGO_ENABLED: "1"
-          CC: x86_64-w64-mingw32-gcc
         run: |
           VERSION=${{ needs.release-please.outputs.tag_name }}
           if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then VERSION="dev"; fi
