@@ -11,6 +11,7 @@ import {
   type DirectoryStateInput,
 } from "../graphql/generated";
 import optionalArray from "../utils/optionalArray";
+import { resolveLastConfiguration } from "../utils/lastConfiguration";
 import { debounce } from "es-toolkit";
 
 // #region 类型定义
@@ -147,15 +148,31 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
     fn(currentBrowse.value);
   }
 
+  // 「上次配置」的字段来源与优先级统一由深 module 解析，展示路径只叠加自身特有输入。
+  // 展示需要合并全部字段且没有场景回退值，与首页新建的解析语义一致，故复用 home-new。
+  const lastConfiguration = computed(() =>
+    resolveLastConfiguration(
+      {
+        lastSession: lastSession.value,
+        lastSessionState: lastSessionState.value,
+        defaultState: defaultState.value,
+      },
+      { kind: "home-new" },
+    ),
+  );
+
   /**
    * 当前生效的图片筛选配置。
    * 1. 本地临时编辑暂存中的筛选（browse.filterBy）优先级最高。
    *    若暂存 buffer 的 id 与当前目录匹配，说明用户曾主动操作过筛选，
    *    此时直接返回暂存值（即使为 undefined 表示已清除），不再回退到服务端。
-   * 2. 服务端查询到的最新配置优先级第二。
-   * 3. 服务端查询到的最新会话 filter 优先级第三（回退）。
+   * 2. 已持久化的浏览配置（暂存的服务端形态）优先级第二。
+   * 3. 其余回退到「上次配置」的解析结果，再叠加展示特有的 keepRating 覆盖。
    */
   const imageFilters = computed<ImageFiltersInput | undefined>(() => {
+    // 每次求值都先消费统一解析结果，再叠加展示路径特有的输入
+    const { filter, writeActions } = lastConfiguration.value;
+
     // 当前目录有暂存状态时，直接使用暂存，不回退到服务端
     if (currentBrowseBuffer.value.id === dirIdRef.value) {
       return currentBrowseBuffer.value.browse.filterBy;
@@ -170,28 +187,16 @@ export function useDirectoryState(directoryId: MaybeRefOrGetter<string>) {
       };
     }
 
-    const lastSessState = serverState.value?.lastSession;
-    if (lastSessState) {
-      const keepRating = serverState.value?.default?.writeActions?.keepRating;
-      const baseFilter = lastSessState.filter;
-      return {
-        rating:
-          keepRating != null ? [keepRating] : baseFilter ? optionalArray(baseFilter.rating) : [],
-        label: baseFilter ? optionalArray(baseFilter.label) : [],
-        query: baseFilter?.query || undefined,
-      };
+    if (filter.rating == null && filter.label == null && !filter.query) {
+      return undefined;
     }
 
-    const serverSess = lastSession.value;
-    if (serverSess?.filter) {
-      return {
-        rating: optionalArray(serverSess.filter.rating),
-        label: optionalArray(serverSess.filter.label),
-        query: serverSess.filter.query || undefined,
-      };
-    }
-
-    return undefined;
+    // keepRating 覆盖是展示路径特有的输入，不进入「上次配置」深 module
+    const keepRating = writeActions?.keepRating;
+    return {
+      ...filter,
+      rating: keepRating != null ? [keepRating] : filter.rating,
+    };
   });
 
   // 评星过滤器，默认使用上次会话设置（若未修改过任何筛选条件）

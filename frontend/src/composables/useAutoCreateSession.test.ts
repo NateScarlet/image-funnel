@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ref } from "vue";
 import { useAutoCreateSession } from "./useAutoCreateSession";
 import * as useSessionModule from "./domain/useSession";
+import type { LastConfigurationContext } from "@/utils/lastConfiguration";
+import type { ImageFiltersInput } from "@/graphql/generated";
 import { DirectoryLastSessionDocument, DirectoryStateDocument } from "@/graphql/generated";
 
 // #region Mock Setup
@@ -68,6 +70,12 @@ function mockDirectoryConfig(config: DirectoryConfig) {
     throw new Error("unexpected query document");
   });
 }
+
+const homeNew: LastConfigurationContext = { kind: "home-new" };
+
+function completion(filter: ImageFiltersInput, targetKeep: number): LastConfigurationContext {
+  return { kind: "completion", filter, targetKeep };
+}
 // #endregion
 
 describe("useAutoCreateSession", () => {
@@ -88,9 +96,7 @@ describe("useAutoCreateSession", () => {
       },
     });
 
-    const { autoCreateSession } = useAutoCreateSession("dir-next", { rating: [] }, 0, {
-      mergeAllFilterFields: true,
-    });
+    const { autoCreateSession } = useAutoCreateSession("dir-next", homeNew);
 
     await autoCreateSession();
 
@@ -113,9 +119,7 @@ describe("useAutoCreateSession", () => {
       lastSession: { id: "session-1", filter: { rating: [0] }, targetKeep: 4 },
     });
 
-    const { autoCreateSession } = useAutoCreateSession("dir-next", { rating: [] }, 0, {
-      mergeAllFilterFields: true,
-    });
+    const { autoCreateSession } = useAutoCreateSession("dir-next", homeNew);
 
     await autoCreateSession();
 
@@ -151,10 +155,8 @@ describe("useAutoCreateSession", () => {
 
     const { autoCreateSession } = useAutoCreateSession(
       "dir-next",
-      // 刚完成会话的条件：不能被目标目录尚未返回的配置顶替
-      { rating: [1] },
-      3,
-      { mergeAllFilterFields: false },
+      // 刚完成会话的条件：只沿用 rating，不能被目标目录尚未返回的配置顶替
+      completion({ rating: [1], label: ["fallback"], query: "fallback" }, 3),
     );
 
     const pending = autoCreateSession();
@@ -170,12 +172,16 @@ describe("useAutoCreateSession", () => {
         node: {
           __typename: "Directory",
           id: "dir-next",
-          lastSession: { filter: { rating: [4] }, targetKeep: 7 },
+          lastSession: {
+            filter: { rating: [4], label: ["active"], query: "active" },
+            targetKeep: 7,
+          },
         },
       },
     });
     await pending;
 
+    // 完成切换场景只合并 rating，当前会话的 label/query 不参与，目标目录的 label/query 也不回填
     expect(createSession).toHaveBeenCalledWith({
       directoryId: "dir-next",
       filter: { rating: [4] },

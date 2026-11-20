@@ -418,9 +418,11 @@ const createInput = ref<CreateNextSessionInput>({
 
 const { autoCreateSession } = useAutoCreateSession(
   () => createInput.value.directoryId,
-  () => createInput.value.filter,
-  () => createInput.value.targetKeep,
-  { mergeAllFilterFields: false },
+  () => ({
+    kind: "completion" as const,
+    filter: createInput.value.filter,
+    targetKeep: createInput.value.targetKeep,
+  }),
 );
 
 const { showError, show: showNotification, remove: removeNotification } = useNotification();

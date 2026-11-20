@@ -156,11 +156,9 @@ const selectedDirectoryId = computed({
 const { lastSession, lastSessionState } = useDirectoryState(() => selectedDirectoryId.value);
 
 // 自动创建会话（基于目录上次配置）
-const { autoCreateSession } = useAutoCreateSession(
-  () => selectedDirectoryId.value,
-  () => ({}),
-  () => 0,
-);
+const { autoCreateSession } = useAutoCreateSession(() => selectedDirectoryId.value, {
+  kind: "home-new",
+} as const);
 
 // 手动创建会话（首次配置弹窗使用）
 const { createSession } = useSession("");
