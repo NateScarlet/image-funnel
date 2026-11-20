@@ -400,7 +400,7 @@ func TestService_Commit_RecordsSampleForEachDecisionIncludingUnchangedRating(t *
 		close(hookDone)
 		return nil
 	}}
-	pipeline := NewAsyncCommitPipeline(context.Background(), recorder, hook, &FakeDirectoryResolver{}, zap.NewNop())
+	pipeline := NewAsyncCommitPipeline(context.Background(), fixedRecorderFactory(recorder), hook, &FakeDirectoryResolver{}, zap.NewNop())
 	svc, cleanupService := NewService(fakeSessionRepo, fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, pipeline)
 	defer cleanupService()
 
@@ -473,7 +473,7 @@ func TestService_Commit_RecorderError_NotReturnedToCaller(t *testing.T) {
 		close(hookDone)
 		return nil
 	}}
-	pipeline := NewAsyncCommitPipeline(context.Background(), recorder, hook, &FakeDirectoryResolver{}, zap.NewNop())
+	pipeline := NewAsyncCommitPipeline(context.Background(), fixedRecorderFactory(recorder), hook, &FakeDirectoryResolver{}, zap.NewNop())
 	svc, cleanupService := NewService(NewFakeSessionRepo(), fakeMeta, fakeScanner, fileChangedSub, metadataUpdatedPub, &FakeDirectoryResolver{}, zap.NewNop(), topic, tempDir, imageFb, pipeline)
 	defer cleanupService()
 

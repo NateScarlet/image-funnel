@@ -263,15 +263,15 @@ func main() {
 		// 采样与钩子共用一个点名 logger：设置 IMAGE_FUNNEL_DEBUG_LOGGERS=commit-pipeline
 		// 即可通过通用机制只打开这条流水线的 Debug 耗时日志，不影响其它 logger。
 		pipelineLogger := logger.Named(commitPipelineLoggerName)
-		recorder, err := samplearchive.NewRecorder(dataRoot, cfg.AbsRootDir,
-			samplearchive.NewMagickSampleGenerator(dataRoot, cfg.MagickConcurrency, pipelineLogger),
-			samplearchive.PNGPromptReader{},
-			pipelineLogger,
-		)
-		if err != nil {
-			logger.Fatal("failed to initialize training sample archive", zap.Error(err))
-		}
-		asyncPipeline := session.NewAsyncCommitPipeline(pipelineCtx, recorder, hookRunner, dirSvc, pipelineLogger)
+		// 解码缓存与差异区域并集只在单次 Commit 内有效：在最外层为每次 Commit 新建
+		// 解码器与并集，并注入到生成器/记录器，Commit 结束即丢弃，避免跨 Commit 泄漏。
+		recorderFactory := session.SampleRecorderFactoryFunc(func() (session.SampleRecorder, error) {
+			decoder := samplearchive.NewCommitImageDecoder(cfg.AbsRootDir)
+			union := samplearchive.NewRegionUnion()
+			generator := samplearchive.NewInProcessSampleGenerator(dataRoot, decoder, union, pipelineLogger)
+			return samplearchive.NewRecorder(dataRoot, cfg.AbsRootDir, generator, samplearchive.PNGPromptReader{}, pipelineLogger)
+		})
+		asyncPipeline := session.NewAsyncCommitPipeline(pipelineCtx, recorderFactory, hookRunner, dirSvc, pipelineLogger)
 		commitPipeline = asyncPipeline
 		waitPipeline = asyncPipeline.Wait
 		logger.Info("training sample archive enabled", zap.String("path", dataRoot))

@@ -8,6 +8,7 @@ require (
 	github.com/NateScarlet/iso8601 v0.3.2
 	github.com/beevik/etree v1.6.0
 	github.com/cespare/xxhash/v2 v2.3.0
+	github.com/chai2010/webp v1.4.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-webauthn/webauthn v0.17.4
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -15,6 +16,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/mssola/user_agent v0.6.0
+	github.com/n7olkachev/imgdiff v1.0.2
 	github.com/pelletier/go-toml/v2 v2.4.0
 	github.com/rs/cors v1.11.1
 	github.com/stretchr/testify v1.11.1

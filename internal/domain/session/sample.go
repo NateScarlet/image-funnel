@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	stdimage "image"
 	"time"
 
 	"main/internal/domain/relpath"
@@ -16,11 +17,31 @@ type SampleRecorder interface {
 	Record(ctx context.Context, sample *Sample) error
 }
 
-// SampleImage 标识一张参与本次决策比较的图片：领域 ID + 原图相对路径。
-// 相对路径供后台适配器解析出绝对路径读原图；领域层不做任何图像计算。
+// SampleRecorderFactory 为一次 Commit 创建独立的 SampleRecorder。
+// 解码图像缓存与差异区域并集只在单次 Commit 内复用，工厂保证它们不跨 Commit 共享，
+// 也避免并发提交互相污染状态。
+type SampleRecorderFactory interface {
+	NewRecorder() (SampleRecorder, error)
+}
+
+// SampleRecorderFactoryFunc 把函数适配为 SampleRecorderFactory。
+type SampleRecorderFactoryFunc func() (SampleRecorder, error)
+
+func (f SampleRecorderFactoryFunc) NewRecorder() (SampleRecorder, error) { return f() }
+
+var _ SampleRecorderFactory = SampleRecorderFactoryFunc(nil)
+
+// SampleImage 标识一张参与本次决策比较的图片：版本化领域 ID + 原图相对路径。
+// ID 是图像的规范身份（含版本），相对路径仅供适配器解析出绝对路径读原图。
 type SampleImage struct {
 	ID      scalar.ID
 	RelPath relpath.Path
+}
+
+// ImageDecoder 把领域图像身份解码为图像，并持有单次 Commit 内的解码缓存。
+// 缓存由实现方以版本化 SampleImage.ID 为键；调用方不得自行读盘，也不得用路径作缓存键。
+type ImageDecoder interface {
+	Decode(image SampleImage) (stdimage.Image, error)
 }
 
 // Sample 一条在 Mark 当下捕获的标注决策。

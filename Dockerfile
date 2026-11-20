@@ -42,15 +42,16 @@ RUN if [ -n "${ALPINE_MIRROR_URL}" ]; then \
     sed -i "s@https\?://dl-cdn.alpinelinux.org/alpine@${ALPINE_MIRROR_URL}@g" /etc/apk/repositories; \
     fi
 
-# 配置 Go 模块代理
+# 配置 Go 模块代理与 cgo（cgo/libwebp 编码需要）
 ARG GOPROXY
-ENV GOPROXY=${GOPROXY}
+ENV GOPROXY=${GOPROXY} \
+    CGO_ENABLED=1
 
 WORKDIR /app
 
-# 安装 git 并缓存 apk 索引与包文件
+# 安装 git 与 C 编译器（cgo/libwebp 编码需要），并缓存 apk 索引与包文件
 RUN --mount=type=cache,target=/var/cache/apk \
-    apk update && apk add --no-cache git
+    apk update && apk add --no-cache git build-base
 
 # 复制依赖定义文件并利用缓存拉取 go 模块
 COPY go.mod go.sum ./
@@ -66,18 +67,37 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     go test ./...
 
 # 阶段 3：构建后端
-# 继承测试阶段（同一构建平台）已就绪的源码与依赖，仅按目标平台交叉编译
-FROM backend-test AS backend-builder
+# cgo/libwebp 需要在目标平台用本地 C 编译器编译，因此本阶段直接运行在目标平台
+# （非原生架构由 Buildx 的 QEMU 模拟），避免交叉编译所需的各架构专用 C 工具链。
+FROM --platform=$TARGETPLATFORM golang:1.25-alpine AS backend-builder
 
-# 自动由 Docker Buildx 传入的目标操作系统和架构
-ARG TARGETOS
-ARG TARGETARCH
+# 支持替换 Alpine 的源地址以加速 apk 包安装
+ARG ALPINE_MIRROR_URL
+RUN if [ -n "${ALPINE_MIRROR_URL}" ]; then \
+    sed -i "s@https\?://dl-cdn.alpinelinux.org/alpine@${ALPINE_MIRROR_URL}@g" /etc/apk/repositories; \
+    fi
+
+# 配置 Go 模块代理
+ARG GOPROXY
+ENV GOPROXY=${GOPROXY}
+
+WORKDIR /app
+
+# 安装 C 编译器与 git
+RUN --mount=type=cache,target=/var/cache/apk \
+    apk update && apk add --no-cache git build-base
+
+# 复制依赖定义文件并利用缓存拉取 go 模块
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+# 复制后端和共享逻辑的全部源码
+COPY . .
+
 # 版本号参数，默认值为 dev
 ARG VERSION=dev
-
-ENV GOOS=${TARGETOS} \
-    GOARCH=${TARGETARCH} \
-    CGO_ENABLED=0
+ENV CGO_ENABLED=1
 
 # 挂载编译器缓存和模块依赖缓存，编译目标平台二进制文件
 RUN --mount=type=cache,target=/root/.cache/go-build \

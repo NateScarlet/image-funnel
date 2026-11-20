@@ -94,6 +94,12 @@ if ($Backend) {
     Write-Host "构建后端项目..."
     Push-Location $ROOT_DIR
     try {
+        # cgo/libwebp 编码需要 C 编译器（Windows 通常为 MSYS2 UCRT64 的 gcc）
+        if (-not (Get-Command gcc -ErrorAction SilentlyContinue)) {
+            Write-Host "❌ 未找到 C 编译器 (gcc)，请先安装 MSYS2 UCRT64 工具链"
+            exit 1
+        }
+        $env:CGO_ENABLED = "1"
         $ldflags = "-X main.version=$gitVersion"
         # 直接使用重定向，不捕获到变量
         go build -ldflags "$ldflags" -o "$BUILD_DIR/image-funnel.exe" ./cmd/server 2>&1

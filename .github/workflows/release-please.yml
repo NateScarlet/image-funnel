@@ -48,10 +48,19 @@ jobs:
           pnpm install
           pnpm run build
 
+      # chai2010/webp 的 WebP 编码走 cgo：从 Linux 交叉编译 Windows 时必须提供 Windows C 编译器，
+      # 否则 cgo 被禁用，webp C 符号未链接导致构建失败。
+      - name: Install MinGW-w64 cross compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-x86-64
+
       - name: Build Backend (Windows)
         env:
           GOOS: windows
           GOARCH: amd64
+          CGO_ENABLED: "1"
+          CC: x86_64-w64-mingw32-gcc
         run: |
           VERSION=${{ needs.release-please.outputs.tag_name }}
           if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then VERSION="dev"; fi

@@ -4,26 +4,24 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os/exec"
+	"image"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"sync"
 	"time"
 
+	"main/internal/domain/session"
+	"main/internal/scalar"
+
+	"github.com/chai2010/webp"
+	"github.com/n7olkachev/imgdiff/pkg/imgdiff"
 	"go.uber.org/zap"
-	"golang.org/x/sync/semaphore"
+	"golang.org/x/image/draw"
 )
 
 const (
 	patchSize    = 224
 	patchQuality = 75
 )
-
-// imageRect 是原图绝对坐标系下的矩形。W/H 为零表示无差异区域。
-type imageRect struct {
-	X, Y, W, H int
-}
 
 // patchMode 决定取块方式：patch 按 diff 区域裁剪，full 直接缩放整图。
 type patchMode string
@@ -33,248 +31,229 @@ const (
 	patchModePatch patchMode = "patch"
 )
 
-// patchKey 是编码缓存的键：(原图路径, 取块模式, 裁剪坐标)。
+// patchKey 是编码缓存的键：(版本化图像 ID, 取块模式, 裁剪坐标)。
 // 同一张图同一区域在多轮比较中反复出现时直接复用块 CID。
 type patchKey struct {
-	sourcePath string
-	mode       patchMode
-	rect       imageRect
+	imageID scalar.ID
+	mode    patchMode
+	rect    imageRect
 }
 
-// MagickSampleGenerator 用项目已有的 ImageMagick 在后台生成一组 224² 块。
+// InProcessSampleGenerator 在进程内完成采样：解码 → diff → 裁剪缩放 → WebP 编码。
+// 热路径上没有 magick 子进程。生成器不持有解码缓存：解码只走注入的 ImageDecoder；
+// 差异区域并集由每次 Commit 新建的 RegionUnion 注入。
 //
-// 取块判据是原图分辨率本身，不使用启发式阈值、不依赖 rating 或生成方式约定：
-//   - 同分辨率（局部重绘）：在原图上算候选与所有基准的差异区域并集，用同一绝对坐标
-//     裁候选与各基准，再各自缩放到 224²，逐块对齐；
-//   - 不同分辨率（全新生成）：差异即全图，不做 diff 与裁剪，整图缩放到 224²。
-//
-// 224² 块只作为训练时的对比输入，不用于计算 diff 坐标。
-type MagickSampleGenerator struct {
-	sem        *semaphore.Weighted
-	cas        *CAS
-	mu         sync.Mutex
-	cache      map[patchKey]string
-	dimensions *magickDimensionReader
-	logger     *zap.Logger
+// 取块判据仍是原图分辨率本身：
+//   - 同分辨率（局部重绘）：求候选与各基准的差异区域并集，用同一绝对坐标裁候选与各基准，再各自缩放到 224²；
+//   - 不同分辨率（全新生成）：差异即全图，整图缩放到 224²。
+type InProcessSampleGenerator struct {
+	cas     *CAS
+	decoder session.ImageDecoder
+	union   *RegionUnion
+	mu      sync.Mutex
+	cache   map[patchKey]string
+	logger  *zap.Logger
 }
 
-var _ SampleImageGenerator = (*MagickSampleGenerator)(nil)
+var _ SampleImageGenerator = (*InProcessSampleGenerator)(nil)
 
-// NewMagickSampleGenerator 在 dataRoot/cas 下落盘图像块；concurrency 限制并发的 magick 进程数。
-func NewMagickSampleGenerator(dataRoot string, concurrency int64, logger *zap.Logger) *MagickSampleGenerator {
-	if concurrency <= 0 {
-		concurrency = 4
-	}
-	return &MagickSampleGenerator{
-		sem:        semaphore.NewWeighted(concurrency),
-		cas:        NewCAS(filepath.Join(dataRoot, "cas")),
-		cache:      make(map[patchKey]string),
-		dimensions: &magickDimensionReader{logger: logger},
-		logger:     logger,
+// NewInProcessSampleGenerator 在 dataRoot/cas 下落盘图像块。
+// decoder 与 union 均由 Commit 工厂创建并注入，生命周期限于单次 Commit。
+func NewInProcessSampleGenerator(dataRoot string, decoder session.ImageDecoder, union *RegionUnion, logger *zap.Logger) *InProcessSampleGenerator {
+	return &InProcessSampleGenerator{
+		cas:     NewCAS(filepath.Join(dataRoot, "cas")),
+		decoder: decoder,
+		union:   union,
+		cache:   make(map[patchKey]string),
+		logger:  logger,
 	}
 }
 
-// Generate 返回候选块 CID 与基准块 CID 列表（顺序与 baselinePaths 一致）。
-// 各阶段耗时以 Debug 级记录：identify → 定位差异区域 → 逐块编码（含缓存/CAS）。
-func (g *MagickSampleGenerator) Generate(ctx context.Context, candidatePath string, baselinePaths []string) (string, []string, error) {
+// Generate 返回候选块 CID 与基准块 CID 列表（顺序与 baselines 一致）。
+// 各阶段耗时以 Debug 级记录：解码 → 定位差异区域 → 逐块渲染编码（含缓存/CAS）。
+func (g *InProcessSampleGenerator) Generate(ctx context.Context, candidate session.SampleImage, baselines []session.SampleImage) (string, []string, error) {
 	start := time.Now()
 	defer func() {
 		g.logger.Debug("did generate sample patch set",
 			zap.Duration("duration", time.Since(start)),
-			zap.String("candidate", candidatePath),
-			zap.Int("baselines", len(baselinePaths)),
+			zap.Stringer("candidateID", candidate.ID),
+			zap.Int("baselines", len(baselines)),
 		)
 	}()
-
-	dimensionsStart := time.Now()
-	candidateW, candidateH, err := g.dimensions.Dimensions(ctx, candidatePath)
-	g.logger.Debug("did read candidate dimensions",
-		zap.Duration("duration", time.Since(dimensionsStart)),
-		zap.String("candidate", candidatePath),
-		zap.Error(err),
-	)
-	if err != nil {
-		return "", nil, fmt.Errorf("read candidate dimensions: %w", err)
+	if err := ctx.Err(); err != nil {
+		return "", nil, err
 	}
 
+	candidateImg, err := g.decode(ctx, candidate)
+	if err != nil {
+		return "", nil, fmt.Errorf("decode candidate image: %w", err)
+	}
+	width, height := candidateImg.Bounds().Dx(), candidateImg.Bounds().Dy()
+
 	regionStart := time.Now()
-	mode, region, err := g.resolveRegion(ctx, candidatePath, candidateW, candidateH, baselinePaths)
+	mode, region, err := g.resolveRegion(ctx, candidateImg, width, height, baselines)
 	g.logger.Debug("did resolve sample region",
 		zap.Duration("duration", time.Since(regionStart)),
 		zap.String("mode", string(mode)),
-		zap.Int("baselines", len(baselinePaths)),
+		zap.Int("baselines", len(baselines)),
 		zap.Error(err),
 	)
 	if err != nil {
 		return "", nil, err
 	}
 
-	encodeStart := time.Now()
-	candidateCID, err := g.encode(ctx, candidatePath, mode, region)
-	g.logger.Debug("did encode candidate patch",
-		zap.Duration("duration", time.Since(encodeStart)),
-		zap.String("candidate", candidatePath),
-		zap.Error(err),
-	)
+	candidateCID, err := g.encode(ctx, candidate.ID, candidateImg, mode, region)
 	if err != nil {
 		return "", nil, fmt.Errorf("encode candidate patch: %w", err)
 	}
 
-	baselineTotalStart := time.Now()
-	baselineCIDs := make([]string, 0, len(baselinePaths))
-	for i, baselinePath := range baselinePaths {
-		encodeStart := time.Now()
-		cid, err := g.encode(ctx, baselinePath, mode, region)
-		g.logger.Debug("did encode baseline patch",
-			zap.Duration("duration", time.Since(encodeStart)),
-			zap.Int("index", i),
-			zap.String("baseline", baselinePath),
-			zap.Error(err),
-		)
+	baselineCIDs := make([]string, 0, len(baselines))
+	for i, baseline := range baselines {
+		baselineImg, err := g.decode(ctx, baseline)
+		if err != nil {
+			return "", nil, fmt.Errorf("decode baseline image: %w", err)
+		}
+		cid, err := g.encode(ctx, baseline.ID, baselineImg, mode, region)
 		if err != nil {
 			return "", nil, fmt.Errorf("encode baseline patch: %w", err)
 		}
+		g.logger.Debug("did encode baseline patch",
+			zap.Int("index", i),
+			zap.Stringer("baselineID", baseline.ID),
+		)
 		baselineCIDs = append(baselineCIDs, cid)
 	}
-	g.logger.Debug("did encode all baseline patches",
-		zap.Duration("duration", time.Since(baselineTotalStart)),
-		zap.Int("count", len(baselinePaths)),
-	)
 	return candidateCID, baselineCIDs, nil
 }
 
-// resolveRegion 判定取块模式与区域。无基准时不做比较，整图缩放。
-func (g *MagickSampleGenerator) resolveRegion(ctx context.Context, candidatePath string, width, height int, baselinePaths []string) (patchMode, imageRect, error) {
-	if len(baselinePaths) == 0 {
+// resolveRegion 判定取块模式与区域。无基准时不做比较，整图缩放且不触碰并集。
+func (g *InProcessSampleGenerator) resolveRegion(ctx context.Context, candidate image.Image, width, height int, baselines []session.SampleImage) (patchMode, imageRect, error) {
+	if len(baselines) == 0 {
 		return patchModeFull, imageRect{W: width, H: height}, nil
 	}
+	if err := ctx.Err(); err != nil {
+		return "", imageRect{}, err
+	}
 
+	// 先解码全部基准并判定分辨率：解码器按版本化 ID 缓存，重复图像不读盘。
+	images := make([]image.Image, 0, len(baselines))
 	sameResolution := true
-	for _, baselinePath := range baselinePaths {
-		w, h, err := g.dimensions.Dimensions(ctx, baselinePath)
+	for _, baseline := range baselines {
+		img, err := g.decode(ctx, baseline)
 		if err != nil {
-			return "", imageRect{}, fmt.Errorf("read baseline dimensions: %w", err)
+			return "", imageRect{}, fmt.Errorf("decode baseline image: %w", err)
 		}
-		if w != width || h != height {
+		images = append(images, img)
+		if img.Bounds().Dx() != width || img.Bounds().Dy() != height {
 			sameResolution = false
-			break
 		}
 	}
 	if !sameResolution {
 		return patchModeFull, imageRect{W: width, H: height}, nil
 	}
 
-	// 同分辨率：对每一对候选/基准求差异包围盒，再取并集，得到唯一裁剪区域。
-	union := imageRect{}
-	for _, baselinePath := range baselinePaths {
-		rect, err := g.diffRect(ctx, candidatePath, baselinePath)
-		if err != nil {
-			return "", imageRect{}, err
+	for i, baselineImg := range images {
+		rect := g.diffRect(candidate, baselineImg)
+		// 每个候选至少做一次 diff：仅当第一个 diff 被已有并集完全包含时提前终止。
+		if i == 0 && g.union.Contains(rect) {
+			return patchModePatch, g.union.Rect(), nil
 		}
-		union = unionRect(union, rect)
+		g.union.Expand(rect)
 	}
-	if union.W <= 0 || union.H <= 0 {
+
+	region := g.union.Rect()
+	if region.W <= 0 || region.H <= 0 {
 		// 完全一致（无差异）时没有 diff 区域，退化为整图缩放，不伪造 patch 坐标
 		return patchModeFull, imageRect{W: width, H: height}, nil
 	}
-	return patchModePatch, union, nil
+	return patchModePatch, region, nil
 }
 
-func unionRect(a, b imageRect) imageRect {
-	if a.W <= 0 || a.H <= 0 {
-		return b
-	}
-	if b.W <= 0 || b.H <= 0 {
-		return a
-	}
-	x1 := min(a.X, b.X)
-	y1 := min(a.Y, b.Y)
-	x2 := max(a.X+a.W, b.X+b.W)
-	y2 := max(a.Y+a.H, b.Y+b.H)
-	return imageRect{X: x1, Y: y1, W: x2 - x1, H: y2 - y1}
-}
-
-// diffRect 用 magick 求两张同分辨率原图的差异包围盒。
-// difference 后 threshold 0 把「任意非零差异」变成白、无差异变成黑；背景设为黑后
-// %@ 返回白色区域的 trim 包围盒。完全一致时 magick 返回 0x0，由调用方当作无差异。
-func (g *MagickSampleGenerator) diffRect(ctx context.Context, candidatePath, baselinePath string) (imageRect, error) {
+// diffRect 用 imgdiff 在进程内求两张同分辨率原图的差异包围盒。
+// 阈值 0 表示任意非零差异都计入；完全一致时返回零尺寸矩形。
+func (g *InProcessSampleGenerator) diffRect(candidate, baseline image.Image) imageRect {
 	start := time.Now()
 	defer func() {
 		g.logger.Debug("did compute sample diff rect",
 			zap.Duration("duration", time.Since(start)),
-			zap.String("candidate", candidatePath),
-			zap.String("baseline", baselinePath),
 		)
 	}()
 
-	if err := g.sem.Acquire(ctx, 1); err != nil {
-		return imageRect{}, err
-	}
-	defer g.sem.Release(1)
-
-	args := []string{
-		candidatePath, baselinePath,
-		"-compose", "difference", "-composite",
-		"-colorspace", "Gray", "-threshold", "0",
-		"-background", "black",
-		"-format", "%@", "info:",
-	}
-	output, err := runMagick(ctx, args...)
-	if err != nil {
-		return imageRect{}, fmt.Errorf("ImageMagick diff error: %w", err)
-	}
-	return parseRect(string(output))
-}
-
-var rectPattern = regexp.MustCompile(`(\d+)x(\d+)([+-]\d+)([+-]\d+)`)
-
-func parseRect(output string) (imageRect, error) {
-	match := rectPattern.FindStringSubmatch(output)
-	if match == nil {
-		return imageRect{}, fmt.Errorf("unexpected ImageMagick diff geometry: %q", output)
-	}
-	values := make([]int, 4)
-	for i := range values {
-		v, err := strconv.Atoi(match[i+1])
-		if err != nil {
-			return imageRect{}, fmt.Errorf("parse ImageMagick diff geometry %q: %w", output, err)
+	result := imgdiff.Diff(candidate, baseline, &imgdiff.Options{Threshold: 0})
+	bounds := result.Image.Bounds()
+	minX, minY := bounds.Max.X, bounds.Max.Y
+	maxX, maxY := bounds.Min.X, bounds.Min.Y
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r, _, _, _ := result.Image.At(x, y).RGBA()
+			if r == 0 {
+				continue
+			}
+			minX = min(minX, x)
+			minY = min(minY, y)
+			maxX = max(maxX, x)
+			maxY = max(maxY, y)
 		}
-		values[i] = v
 	}
-	return imageRect{W: values[0], H: values[1], X: values[2], Y: values[3]}, nil
+	if maxX < minX || maxY < minY {
+		return imageRect{}
+	}
+	return imageRect{
+		X: minX - bounds.Min.X,
+		Y: minY - bounds.Min.Y,
+		W: maxX - minX + 1,
+		H: maxY - minY + 1,
+	}
 }
 
-// encode 先查 (图片, 模式, 坐标) 缓存；未命中时渲染并写入 CAS。
-// 缓存命中与未命中时的渲染、CAS 写分别计时，用于区分瓶颈是 magick 还是落盘。
-func (g *MagickSampleGenerator) encode(ctx context.Context, sourcePath string, mode patchMode, rect imageRect) (string, error) {
-	key := patchKey{sourcePath: sourcePath, mode: mode, rect: rect}
+func (g *InProcessSampleGenerator) decode(ctx context.Context, image session.SampleImage) (image.Image, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	start := time.Now()
+	img, err := g.decoder.Decode(image)
+	g.logger.Debug("did decode source image",
+		zap.Duration("duration", time.Since(start)),
+		zap.Stringer("imageID", image.ID),
+		zap.Error(err),
+	)
+	return img, err
+}
+
+// encode 先查 (图像 ID, 模式, 坐标) 缓存；未命中时渲染并写入 CAS。
+func (g *InProcessSampleGenerator) encode(ctx context.Context, imageID scalar.ID, img image.Image, mode patchMode, rect imageRect) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	key := patchKey{imageID: imageID, mode: mode, rect: rect}
 	g.mu.Lock()
 	cid, cached := g.cache[key]
 	g.mu.Unlock()
 	if cached {
 		g.logger.Debug("sample patch cache hit",
-			zap.String("source", sourcePath),
+			zap.Stringer("imageID", imageID),
 			zap.String("mode", string(mode)),
 		)
 		return cid, nil
 	}
 
 	renderStart := time.Now()
-	data, err := g.render(ctx, sourcePath, mode, rect)
+	data, err := g.render(img, mode, rect)
 	g.logger.Debug("did render sample patch",
 		zap.Duration("duration", time.Since(renderStart)),
-		zap.String("source", sourcePath),
+		zap.Stringer("imageID", imageID),
 		zap.String("mode", string(mode)),
 		zap.Error(err),
 	)
 	if err != nil {
 		return "", err
 	}
+
 	casStart := time.Now()
 	cid, err = g.cas.Put(data)
 	g.logger.Debug("did store sample patch in CAS",
 		zap.Duration("duration", time.Since(casStart)),
-		zap.String("source", sourcePath),
+		zap.Stringer("imageID", imageID),
 		zap.Error(err),
 	)
 	if err != nil {
@@ -289,74 +268,27 @@ func (g *MagickSampleGenerator) encode(ctx context.Context, sourcePath string, m
 
 // render 生成 224² WebP 字节。两种模式都把整块内容强制缩放到 224²：
 // patch 模式先按 diff 区域裁剪，full 模式直接缩放整张原图；不做居中裁剪，避免丢掉边缘差异。
-func (g *MagickSampleGenerator) render(ctx context.Context, sourcePath string, mode patchMode, rect imageRect) ([]byte, error) {
-	waitStart := time.Now()
-	if err := g.sem.Acquire(ctx, 1); err != nil {
-		return nil, err
-	}
-	g.logger.Debug("did acquire magick render slot",
-		zap.Duration("duration", time.Since(waitStart)),
-		zap.String("source", sourcePath),
-	)
-	defer g.sem.Release(1)
-
-	size := fmt.Sprintf("%dx%d", patchSize, patchSize)
-	args := []string{sourcePath, "-coalesce"}
+func (g *InProcessSampleGenerator) render(img image.Image, mode patchMode, rect imageRect) ([]byte, error) {
+	src := img
 	if mode == patchModePatch {
-		crop := fmt.Sprintf("%dx%d%+d%+d", rect.W, rect.H, rect.X, rect.Y)
-		args = append(args, "-crop", crop, "+repage")
+		bounds := img.Bounds()
+		crop := image.Rect(
+			bounds.Min.X+rect.X,
+			bounds.Min.Y+rect.Y,
+			bounds.Min.X+rect.X+rect.W,
+			bounds.Min.Y+rect.Y+rect.H,
+		)
+		cropped := image.NewRGBA(image.Rect(0, 0, rect.W, rect.H))
+		draw.Draw(cropped, cropped.Bounds(), img, crop.Min, draw.Src)
+		src = cropped
 	}
-	args = append(args, "-resize", size+"!", "-quality", fmt.Sprint(patchQuality), "webp:-")
 
-	magickStart := time.Now()
-	data, err := runMagick(ctx, args...)
-	g.logger.Debug("did run magick render",
-		zap.Duration("duration", time.Since(magickStart)),
-		zap.String("source", sourcePath),
-		zap.Error(err),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("ImageMagick sample patch error: %w", err)
+	resized := image.NewRGBA(image.Rect(0, 0, patchSize, patchSize))
+	draw.CatmullRom.Scale(resized, resized.Bounds(), src, src.Bounds(), draw.Src, nil)
+
+	var buf bytes.Buffer
+	if err := webp.Encode(&buf, resized, &webp.Options{Quality: patchQuality}); err != nil {
+		return nil, fmt.Errorf("encode WebP patch: %w", err)
 	}
-	return data, nil
+	return buf.Bytes(), nil
 }
-
-func runMagick(ctx context.Context, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "magick", args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		return nil, fmt.Errorf("%w, stderr: %q", err, stderr.String())
-	}
-	return stdout.Bytes(), nil
-}
-
-// #region 原图尺寸读取
-
-type magickDimensionReader struct {
-	logger *zap.Logger
-}
-
-func (r *magickDimensionReader) Dimensions(ctx context.Context, path string) (int, int, error) {
-	start := time.Now()
-	output, err := runMagick(ctx, "identify", "-ping", "-format", "%w %h", path)
-	r.logger.Debug("did run magick identify",
-		zap.Duration("duration", time.Since(start)),
-		zap.String("source", path),
-		zap.Error(err),
-	)
-	if err != nil {
-		return 0, 0, fmt.Errorf("ImageMagick identify error: %w", err)
-	}
-	var width, height int
-	if _, err := fmt.Sscanf(string(output), "%d %d", &width, &height); err != nil {
-		return 0, 0, fmt.Errorf("parse ImageMagick identify output %q: %w", output, err)
-	}
-	return width, height, nil
-}
-
-// #endregion

@@ -22,18 +22,18 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
-// fakeSampleImageGenerator 只验证 Recorder 传给端口的路径与写出的引用，不做图像计算。
+// fakeSampleImageGenerator 只验证 Recorder 传给端口的图像身份与写出的引用，不做图像计算。
 type fakeSampleImageGenerator struct {
 	candidateCID string
 	baselineCIDs []string
 	err          error
-	gotCandidate string
-	gotBaselines []string
+	gotCandidate session.SampleImage
+	gotBaselines []session.SampleImage
 }
 
-func (f *fakeSampleImageGenerator) Generate(_ context.Context, candidate string, baselines []string) (string, []string, error) {
+func (f *fakeSampleImageGenerator) Generate(_ context.Context, candidate session.SampleImage, baselines []session.SampleImage) (string, []string, error) {
 	f.gotCandidate = candidate
-	f.gotBaselines = append([]string(nil), baselines...)
+	f.gotBaselines = append([]session.SampleImage(nil), baselines...)
 	return f.candidateCID, f.baselineCIDs, f.err
 }
 
@@ -102,9 +102,11 @@ func TestRecorder_Record_AppendsRecordReferencingCandidateAndBaselineCIDs(t *tes
 	// SHA256("hello")，由 pwsh 预先算出
 	assert.Equal(t, "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", records[0]["fingerprint"])
 
-	assert.Equal(t, filepath.Join(dataRoot, "source.png"), generator.gotCandidate)
+	assert.Equal(t, scalar.ToID("img-1"), generator.gotCandidate.ID)
+	assert.Equal(t, "source.png", generator.gotCandidate.RelPath.String())
 	require.Len(t, generator.gotBaselines, 1)
-	assert.Equal(t, "baseline.png", filepath.Base(generator.gotBaselines[0]))
+	assert.Equal(t, scalar.ToID("base-1"), generator.gotBaselines[0].ID)
+	assert.Equal(t, "baseline.png", generator.gotBaselines[0].RelPath.String())
 }
 
 func TestRecorder_Record_WithoutBaselines_WritesEmptyLists(t *testing.T) {

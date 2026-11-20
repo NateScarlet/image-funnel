@@ -14,10 +14,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// SampleImageGenerator 在后台从候选原图与基准原图生成一组 224² 块，各自按 CID 落盘，
-// 返回候选块 CID 与基准块 CID 列表（顺序与传入的基准路径一致）。
+// SampleImageGenerator 在后台从候选与基准图像生成一组 224² 块，各自按 CID 落盘，
+// 返回候选块 CID 与基准块 CID 列表（顺序与传入的基准一致）。
+// 图像以版本化 SampleImage 传递；解码由生成器注入的 ImageDecoder 负责。
 type SampleImageGenerator interface {
-	Generate(ctx context.Context, candidatePath string, baselinePaths []string) (candidateCID string, baselineCIDs []string, err error)
+	Generate(ctx context.Context, candidate session.SampleImage, baselines []session.SampleImage) (candidateCID string, baselineCIDs []string, err error)
 }
 
 // PromptReader 尽力读取 PNG 中的 ComfyUI prompt JSON；读不到时返回 nil。
@@ -80,20 +81,19 @@ func (r *Recorder) Record(ctx context.Context, sample *session.Sample) error {
 		)
 	}()
 
-	baselinePaths := make([]string, 0, len(sample.Baselines))
 	baselineIDs := make([]string, 0, len(sample.Baselines))
 	for _, baseline := range sample.Baselines {
-		baselinePaths = append(baselinePaths, baseline.RelPath.Abs(r.baseDir))
 		baselineIDs = append(baselineIDs, baseline.ID.String())
 	}
 
+	candidate := session.SampleImage{ID: sample.ImageID, RelPath: sample.SourceRelPath}
 	sourcePath := sample.SourceRelPath.Abs(r.baseDir)
 	generateStart := time.Now()
-	candidateCID, baselineCIDs, err := r.generator.Generate(ctx, sourcePath, baselinePaths)
+	candidateCID, baselineCIDs, err := r.generator.Generate(ctx, candidate, sample.Baselines)
 	r.logger.Debug("did generate sample images",
 		zap.Duration("duration", time.Since(generateStart)),
 		zap.Stringer("imageID", sample.ImageID),
-		zap.Int("baselines", len(baselinePaths)),
+		zap.Int("baselines", len(sample.Baselines)),
 		zap.Error(err),
 	)
 	if err != nil {

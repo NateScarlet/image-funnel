@@ -87,6 +87,27 @@ func waitFor(t *testing.T, ch <-chan struct{}, msg string) {
 	}
 }
 
+// fixedRecorderFactory 把单个 FakeSampleRecorder 适配为工厂，供不关心 per-Commit 状态的用例使用。
+func fixedRecorderFactory(rec SampleRecorder) SampleRecorderFactory {
+	return SampleRecorderFactoryFunc(func() (SampleRecorder, error) { return rec, nil })
+}
+
+func TestAsyncCommitPipeline_CreatesFreshRecorderPerCommit(t *testing.T) {
+	var created atomic.Int32
+	factory := SampleRecorderFactoryFunc(func() (SampleRecorder, error) {
+		created.Add(1)
+		return &FakeSampleRecorder{}, nil
+	})
+	hook := &FakeHookRunner{OnCommitSessionFunc: func(relpath.Path) error { return nil }}
+	pipeline := NewAsyncCommitPipeline(context.Background(), factory, hook, &FakeDirectoryResolver{}, zap.NewNop())
+
+	pipeline.Enqueue([]*Sample{{ImageID: scalar.ToID("1")}}, scalar.ToID("d1"))
+	pipeline.Enqueue([]*Sample{{ImageID: scalar.ToID("2")}}, scalar.ToID("d1"))
+	pipeline.Wait()
+
+	assert.Equal(t, int32(2), created.Load(), "每次 Commit 都应创建独立的记录器（连同解码器与并集）")
+}
+
 // #endregion
 
 func TestCommit_WhenArchiveEnabled_ReturnsBeforeSamplingAndHook(t *testing.T) {
@@ -108,7 +129,7 @@ func TestCommit_WhenArchiveEnabled_ReturnsBeforeSamplingAndHook(t *testing.T) {
 		close(hookFired)
 		return nil
 	}}
-	pipeline := NewAsyncCommitPipeline(context.Background(), recorder, hook, &FakeDirectoryResolver{}, zap.NewNop())
+	pipeline := NewAsyncCommitPipeline(context.Background(), fixedRecorderFactory(recorder), hook, &FakeDirectoryResolver{}, zap.NewNop())
 	env := setupPipelineEnv(t, pipeline, tempDir)
 	defer env.cleanup()
 
@@ -163,7 +184,7 @@ func TestCommit_SyncSideEffectsCompleteBeforeReturning(t *testing.T) {
 		close(hookDone)
 		return nil
 	}}
-	pipeline := NewAsyncCommitPipeline(context.Background(), recorder, hook, &FakeDirectoryResolver{}, zap.NewNop())
+	pipeline := NewAsyncCommitPipeline(context.Background(), fixedRecorderFactory(recorder), hook, &FakeDirectoryResolver{}, zap.NewNop())
 
 	fakeMeta := NewFakeMetadataRepo()
 	saved := &mockSessionSaved{ids: make(chan scalar.ID, 1)}
@@ -240,7 +261,7 @@ func TestCommit_WhenArchiveEnabled_SamplingReadsSourceBeforeHookRemovesIt(t *tes
 		close(hookDone)
 		return nil
 	}}
-	pipeline := NewAsyncCommitPipeline(context.Background(), recorder, hook, &FakeDirectoryResolver{}, zap.NewNop())
+	pipeline := NewAsyncCommitPipeline(context.Background(), fixedRecorderFactory(recorder), hook, &FakeDirectoryResolver{}, zap.NewNop())
 	env := setupPipelineEnv(t, pipeline, tempDir)
 	defer env.cleanup()
 
@@ -279,7 +300,7 @@ func TestCommit_WhenArchiveEnabled_SampleFailureIsLoggedButDoesNotStopOthersOrHo
 		recordedMu.Unlock()
 		return nil
 	}}
-	pipeline := NewAsyncCommitPipeline(context.Background(), recorder, hook, &FakeDirectoryResolver{}, zap.New(core))
+	pipeline := NewAsyncCommitPipeline(context.Background(), fixedRecorderFactory(recorder), hook, &FakeDirectoryResolver{}, zap.New(core))
 	env := setupPipelineEnv(t, pipeline, tempDir)
 	defer env.cleanup()
 
@@ -338,7 +359,7 @@ func TestCommit_WhenArchiveEnabled_UsesServerHeldContext(t *testing.T) {
 		close(hookFired)
 		return nil
 	}}
-	pipeline := NewAsyncCommitPipeline(serverCtx, recorder, hook, &FakeDirectoryResolver{}, zap.NewNop())
+	pipeline := NewAsyncCommitPipeline(serverCtx, fixedRecorderFactory(recorder), hook, &FakeDirectoryResolver{}, zap.NewNop())
 	env := setupPipelineEnv(t, pipeline, tempDir)
 	defer env.cleanup()
 
@@ -382,7 +403,7 @@ func TestCommit_WhenArchiveEnabled_LogsStageDurationsForSamplingAndHook(t *testi
 		close(hookFired)
 		return nil
 	}}
-	pipeline := NewAsyncCommitPipeline(context.Background(), &FakeSampleRecorder{}, hook, &FakeDirectoryResolver{}, zap.New(core))
+	pipeline := NewAsyncCommitPipeline(context.Background(), fixedRecorderFactory(&FakeSampleRecorder{}), hook, &FakeDirectoryResolver{}, zap.New(core))
 	env := setupPipelineEnv(t, pipeline, tempDir)
 	defer env.cleanup()
 

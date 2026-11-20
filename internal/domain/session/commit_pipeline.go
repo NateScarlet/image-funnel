@@ -26,7 +26,7 @@ type CommitPipeline interface {
 // 单条采样失败只记 zap 日志，不中断后续样本，也不阻止钩子触发。
 type AsyncCommitPipeline struct {
 	ctx               context.Context
-	recorder          SampleRecorder
+	recorderFactory   SampleRecorderFactory
 	hookRunner        hook.Runner
 	directoryResolver DirectoryResolver
 	logger            *zap.Logger
@@ -35,16 +35,18 @@ type AsyncCommitPipeline struct {
 
 var _ CommitPipeline = (*AsyncCommitPipeline)(nil)
 
+// NewAsyncCommitPipeline 的 recorderFactory 为每次 Commit 创建独立的记录器，
+// 从而让解码缓存与差异区域并集随 Commit 创建、结束丢弃，不跨 Commit 共享。
 func NewAsyncCommitPipeline(
 	ctx context.Context,
-	recorder SampleRecorder,
+	recorderFactory SampleRecorderFactory,
 	hookRunner hook.Runner,
 	directoryResolver DirectoryResolver,
 	logger *zap.Logger,
 ) *AsyncCommitPipeline {
 	return &AsyncCommitPipeline{
 		ctx:               ctx,
-		recorder:          recorder,
+		recorderFactory:   recorderFactory,
 		hookRunner:        hookRunner,
 		directoryResolver: directoryResolver,
 		logger:            logger,
@@ -76,26 +78,32 @@ func (p *AsyncCommitPipeline) run(samples []*Sample, directoryID scalar.ID) {
 		)
 	}()
 
-	// 采样阶段：图片 ID 带版本，文件不会被原地修改；按 Mark 当下捕获的相对路径在后台解析出绝对路径读原图
+	// 采样阶段：图片 ID 带版本，文件不会被原地修改；按 Mark 当下捕获的相对路径在后台解析出绝对路径读原图。
+	// 每次 Commit 都新建记录器（连同解码器与区域并集），保证状态只在本次 Commit 内有效。
 	samplingStart := time.Now()
-	for i, sample := range samples {
-		if p.ctx.Err() != nil {
-			return
-		}
-		recordStart := time.Now()
-		err := p.recorder.Record(p.ctx, sample)
-		p.logger.Debug("did record training sample",
-			zap.Duration("duration", time.Since(recordStart)),
-			zap.Int("index", i),
-			zap.Stringer("imageID", sample.ImageID),
-			zap.Int("baselines", len(sample.Baselines)),
-			zap.Error(err),
-		)
-		if err != nil {
-			p.logger.Error("failed to archive training sample",
+	recorder, err := p.recorderFactory.NewRecorder()
+	if err != nil {
+		p.logger.Error("failed to create training sample recorder", zap.Error(err))
+	} else {
+		for i, sample := range samples {
+			if p.ctx.Err() != nil {
+				return
+			}
+			recordStart := time.Now()
+			err := recorder.Record(p.ctx, sample)
+			p.logger.Debug("did record training sample",
+				zap.Duration("duration", time.Since(recordStart)),
+				zap.Int("index", i),
 				zap.Stringer("imageID", sample.ImageID),
+				zap.Int("baselines", len(sample.Baselines)),
 				zap.Error(err),
 			)
+			if err != nil {
+				p.logger.Error("failed to archive training sample",
+					zap.Stringer("imageID", sample.ImageID),
+					zap.Error(err),
+				)
+			}
 		}
 	}
 	p.logger.Debug("did sample training samples phase",
