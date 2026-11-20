@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"main/internal/domain/directory"
+	"main/internal/domain/hook"
 	"main/internal/domain/image"
 	"main/internal/domain/metadata"
 	"main/internal/domain/relpath"
@@ -434,3 +435,156 @@ func TestCommit_WhenArchiveEnabled_LogsStageDurationsForSamplingAndHook(t *testi
 		}
 	}
 }
+
+// #region 两种调度的同一 seam：顺序与错误策略契约
+
+// pipelineScheduler 把「后台异步」与「同步」两种调度抽象为同一 seam：
+// enqueue 登记一次提交，settle 等待本次提交的全部副作用完成（同步调度为空操作）。
+type pipelineScheduler struct {
+	enqueue func([]*Sample, scalar.ID)
+	settle  func()
+}
+
+type schedulerKind string
+
+const (
+	schedulerAsync schedulerKind = "async"
+	schedulerSync  schedulerKind = "sync"
+)
+
+var allSchedulerKinds = []schedulerKind{schedulerAsync, schedulerSync}
+
+func newPipelineScheduler(
+	kind schedulerKind,
+	ctx context.Context,
+	recorder SampleRecorder,
+	hookRunner hook.Runner,
+	resolver DirectoryResolver,
+	logger *zap.Logger,
+) pipelineScheduler {
+	switch kind {
+	case schedulerAsync:
+		pipeline := NewAsyncCommitPipeline(ctx, fixedRecorderFactory(recorder), hookRunner, resolver, logger)
+		return pipelineScheduler{enqueue: pipeline.Enqueue, settle: pipeline.Wait}
+	case schedulerSync:
+		pipeline := NewNullCommitPipeline(ctx, recorder, hookRunner, resolver, logger)
+		return pipelineScheduler{enqueue: pipeline.Enqueue, settle: func() {}}
+	default:
+		panic("unknown commit pipeline scheduler: " + string(kind))
+	}
+}
+
+// 钩子必须等采样阶段全部结束后才触发；否则钩子移走源图会让后续采样拿不到原图。
+func TestCommitPipeline_HookFiresOnlyAfterAllSamplesComplete(t *testing.T) {
+	for _, kind := range allSchedulerKinds {
+		t.Run(string(kind), func(t *testing.T) {
+			// 缓冲 1：采样 goroutine 可能先于主 goroutine 进入 waitFor，避免信号被 default 分支丢弃
+			enteredSecond := make(chan struct{}, 1)
+			release := make(chan struct{})
+			var records atomic.Int32
+			recorder := &FakeSampleRecorder{OnRecord: func(context.Context, *Sample) error {
+				if records.Add(1) == 2 {
+					enteredSecond <- struct{}{}
+					<-release
+				}
+				return nil
+			}}
+			hookFired := make(chan struct{})
+			hookRunner := &FakeHookRunner{OnCommitSessionFunc: func(relpath.Path) error {
+				close(hookFired)
+				return nil
+			}}
+			scheduler := newPipelineScheduler(kind, context.Background(), recorder, hookRunner, &FakeDirectoryResolver{}, zap.NewNop())
+
+			// 同步调度的 enqueue 会阻塞到采样结束，因此从独立 goroutine 调用，两种调度共用同一断言
+			done := make(chan struct{})
+			go func() {
+				scheduler.enqueue([]*Sample{{ImageID: scalar.ToID("1")}, {ImageID: scalar.ToID("2")}}, scalar.ToID("d1"))
+				scheduler.settle()
+				close(done)
+			}()
+
+			waitFor(t, enteredSecond, "第二条样本从未开始采样")
+			select {
+			case <-hookFired:
+				t.Fatal("采样未全部结束时钩子不应触发")
+			default:
+			}
+
+			close(release)
+			waitFor(t, done, "提交流水线从未结束")
+			select {
+			case <-hookFired:
+			default:
+				t.Fatal("采样全部结束后钩子应触发")
+			}
+		})
+	}
+}
+
+// 单条采样失败只记日志，继续其余样本，且不阻止钩子触发。
+func TestCommitPipeline_SampleFailureIsLoggedAndContinues(t *testing.T) {
+	for _, kind := range allSchedulerKinds {
+		t.Run(string(kind), func(t *testing.T) {
+			core, logs := observer.New(zap.ErrorLevel)
+			var mu sync.Mutex
+			var recorded []scalar.ID
+			recorder := &FakeSampleRecorder{OnRecord: func(_ context.Context, s *Sample) error {
+				if s.ImageID == scalar.ToID("1") {
+					return errors.New("archive failed")
+				}
+				mu.Lock()
+				recorded = append(recorded, s.ImageID)
+				mu.Unlock()
+				return nil
+			}}
+			var hookCalls atomic.Int32
+			hookRunner := &FakeHookRunner{OnCommitSessionFunc: func(relpath.Path) error {
+				hookCalls.Add(1)
+				return nil
+			}}
+			scheduler := newPipelineScheduler(kind, context.Background(), recorder, hookRunner, &FakeDirectoryResolver{}, zap.New(core))
+			scheduler.enqueue([]*Sample{{ImageID: scalar.ToID("1")}, {ImageID: scalar.ToID("2")}}, scalar.ToID("d1"))
+			scheduler.settle()
+
+			mu.Lock()
+			assert.Equal(t, []scalar.ID{scalar.ToID("2")}, recorded, "失败样本之后的样本仍应继续归档")
+			mu.Unlock()
+			assert.Equal(t, int32(1), hookCalls.Load(), "单条采样失败不应阻止钩子")
+			entries := logs.FilterMessage("failed to archive training sample").All()
+			require.Len(t, entries, 1, "失败应有 zap 日志记录")
+			assert.Contains(t, fmt.Sprint(entries[0].ContextMap()["error"]), "archive failed")
+		})
+	}
+}
+
+// 目录解析失败只记日志并跳过钩子，但采样阶段仍应完成。
+func TestCommitPipeline_DirectoryResolveFailureSkipsHook(t *testing.T) {
+	for _, kind := range allSchedulerKinds {
+		t.Run(string(kind), func(t *testing.T) {
+			core, logs := observer.New(zap.ErrorLevel)
+			resolver := &FakeDirectoryResolver{Err: errors.New("resolve failed")}
+			var recorded atomic.Int32
+			recorder := &FakeSampleRecorder{OnRecord: func(context.Context, *Sample) error {
+				recorded.Add(1)
+				return nil
+			}}
+			var hookCalls atomic.Int32
+			hookRunner := &FakeHookRunner{OnCommitSessionFunc: func(relpath.Path) error {
+				hookCalls.Add(1)
+				return nil
+			}}
+			scheduler := newPipelineScheduler(kind, context.Background(), recorder, hookRunner, resolver, zap.New(core))
+			scheduler.enqueue([]*Sample{{ImageID: scalar.ToID("1")}}, scalar.ToID("d1"))
+			scheduler.settle()
+
+			assert.Equal(t, int32(1), recorded.Load(), "目录解析失败发生在采样之后，不应影响采样")
+			assert.Equal(t, int32(0), hookCalls.Load(), "目录解析失败时应跳过钩子")
+			entries := logs.FilterMessage("failed to resolve directory for post commit session hook").All()
+			require.Len(t, entries, 1, "目录解析失败应有 zap 日志记录")
+			assert.Contains(t, fmt.Sprint(entries[0].ContextMap()["error"]), "resolve failed")
+		})
+	}
+}
+
+// #endregion
