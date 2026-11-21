@@ -44,7 +44,7 @@
 
 **取块判据是原图分辨率本身**，无启发式阈值、不依赖 rating 或生成方式约定：
 
-- **同分辨率（局部重绘）**：在原图上计算候选与所有基准的差异区域并集（ImageMagick `-compose difference -composite` / `-threshold 0` / `-background black` / `%@` 取 trim 包围盒），用**同一绝对坐标**分别裁候选与各基准原图，再各自缩放到 224²；各块逐块对齐、可直接对比。
+- **同分辨率（局部重绘）**：在原图上用进程内的差异工具（imgdiff，`Threshold: 0`，任意非零差异都计入）求候选与所有基准的**差异区域并集**，用**同一绝对坐标**分别裁候选与各基准原图，再各自缩放到 224²；各块逐块对齐、可直接对比。diff、裁剪、缩放、编码全部在进程内完成，热路径上没有 magick 子进程。
 - **不同分辨率（全新生成）**：局部重绘必然保持分辨率不变，因此差异即全图；不做 diff 定位与裁剪，候选块与各基准块直接用**整张原图**缩放到 224²。
 
 224² 块只作为训练时的对比输入，**不用于计算 diff 坐标**（分辨率不足）。基准留空时不产出 diff patch，候选按整图缩放。
@@ -88,4 +88,4 @@ CID 计算：SHA-256 摘要 → CIDv1（version 1 / codec raw 0x55 / sha2-256 mu
 - 环境变量 `IMAGE_FUNNEL_ENABLE_TRAINING_SAMPLE_ARCHIVE=true` 开启；未设置、无效值或 `false` 均关闭（零值安全）。
 - 开启后在归档根目录 `<DataDir>/training-samples-v2/` 下按需创建 `cas/` 与 `samples.jsonl`；日志会打印解析后的数据目录绝对路径。旧 `training-samples` 目录不读写、不迁移。
 - 失败处理：图像块生成、CAS 写入、JSONL 追加任一失败只记录 zap 日志（后台 fire-and-forget），不会使 `Service.Commit` 返回错误；单条失败不中断其余样本，也不阻止「采样后」的提交后钩子。
-- 差异工具使用项目已有的 ImageMagick（magick），不引入 imgdiff / odiff 等新依赖。
+- 差异区域在采样热路径上由进程内的 imgdiff（`Threshold: 0`）计算，裁剪、缩放、WebP 编码也全部在进程内完成，热路径上没有 magick 子进程。magick 仅在测试中作为语义兼容守卫出现：验证进程内 diff 的裁剪坐标与旧 magick 路径一致，不是生产差异工具，也不是可供替换的第二实现。

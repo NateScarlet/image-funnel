@@ -34,7 +34,10 @@ func sampleImageInternal(t *testing.T, dir, name string) session.SampleImage {
 	return session.SampleImage{ID: scalar.ToID(name), RelPath: rel}
 }
 
-// magickDiffRect 复现旧的 diff 判据，用于验证进程内路径的裁剪坐标没有漂移。
+// magickDiffRect 是测试专用的语义兼容守卫：用旧 magick diff 判据算出裁剪坐标，
+// 验证进程内的 diffRect（imgdiff）在已知夹具上产生相同的坐标（#188 的验收标准）。
+// 它只在测试中运行，不是生产差异工具，也不是可供替换的第二实现；
+// 生产差异区域计算的唯一拥有者是 InProcessSampleGenerator.diffRect。
 func magickDiffRect(t *testing.T, candidate, baseline string) imageRect {
 	t.Helper()
 	output, err := exec.Command("magick",
