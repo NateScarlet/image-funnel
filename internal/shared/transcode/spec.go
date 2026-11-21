@@ -41,3 +41,15 @@ func NewSpec(width int, format ImageFormat) (Spec, error) {
 
 func (s Spec) Width() int          { return s.width }
 func (s Spec) Format() ImageFormat { return s.format }
+
+// EffectiveWidth 是「不放大」规则的唯一实现：返回请求宽度在给定源宽下实际应产出的宽度。
+//
+// width == 0 表示全尺寸诉求；sourceWidth == 0 表示源宽不可知，此时没有可收缩的依据，
+// 保持 width，不放大由编码器在运行时继续保证（magick 的 '>'、ffmpeg 的 min(iw,N)）。
+// 两者均 > 0 时取较小值，使所有 w >= 源宽的请求收敛到同一份变体产物。
+func EffectiveWidth(width, sourceWidth int) int {
+	if width == 0 || sourceWidth == 0 {
+		return width
+	}
+	return min(width, sourceWidth)
+}

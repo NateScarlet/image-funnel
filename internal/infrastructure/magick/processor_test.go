@@ -3,6 +3,7 @@ package magick
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"main/internal/shared/transcode"
 	"os"
 	"os/exec"
@@ -47,6 +48,22 @@ func TestProcess_RealMagick_UsesConfiguredQuality(t *testing.T) {
 	require.GreaterOrEqual(t, out.Len(), 12)
 	assert.Equal(t, "RIFF", string(out.Bytes()[0:4]))
 	assert.Equal(t, "WEBP", string(out.Bytes()[8:12]))
+}
+
+func TestResizeArgument_UsesEffectiveWidthRule(t *testing.T) {
+	// resize 参数的目标宽度必须来自唯一规则 EffectiveWidth，而非在编码器内重复书写 min。
+	// Go 侧不掌握源宽时传入 0，规则原样返回 width，由 '>' 在运行时收缩。
+	assert.Equal(t, "1024x>", resizeArgument(1024, 0))
+	assert.Equal(t, "0x>", resizeArgument(0, 0))
+	// 已知源宽时规则取较小值，参数仍保持 '>' 作为运行时等价保障
+	for _, tc := range []struct{ width, sourceWidth, want int }{
+		{4096, 2048, 2048},
+		{1024, 2048, 1024},
+		{2048, 2048, 2048},
+	} {
+		assert.Equal(t, fmt.Sprintf("%dx>", tc.want), resizeArgument(tc.width, tc.sourceWidth))
+		assert.Equal(t, tc.want, transcode.EffectiveWidth(tc.width, tc.sourceWidth))
+	}
 }
 
 func TestNewProcessor(t *testing.T) {

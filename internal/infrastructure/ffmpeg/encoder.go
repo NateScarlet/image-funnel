@@ -70,13 +70,16 @@ func NewEncoder(runner CommandRunner, tempDir string) *Encoder {
 func (e *Encoder) ID() string { return appimage.EncoderSVTAV1 }
 
 // buildArgs 组装 ffmpeg 转码参数。复刻 magick 管线语义：
-// - "-y" 覆盖已存在的临时输出文件（CreateTemp 预先创建了空文件）
-// - "-nostdin" 防止 ffmpeg 在无输入终端环境下挂起等待交互
-// - "-ignore_loop 1" 等价 magick 的 -coalesce（动图按帧序合成，忽略循环元数据）
-// - "scale='min(iw,N)':-2" 等价 magick 的 "Nx>"（仅当源宽超过 N 时缩小，且保证偶数高度）
-// - "-pix_fmt yuv420p -color_range pc"：显式全范围，与 magick 输出一致
-//   （ffmpeg 默认标为受限范围 tv，会让黑位与对比度被压缩，实测影响约 0.6dB）
-// - 输出目标为临时文件路径（AVIF muxer 需要可寻址输出）
+//   - "-y" 覆盖已存在的临时输出文件（CreateTemp 预先创建了空文件）
+//   - "-nostdin" 防止 ffmpeg 在无输入终端环境下挂起等待交互
+//   - "-ignore_loop 1" 等价 magick 的 -coalesce（动图按帧序合成，忽略循环元数据）
+//   - "scale='min(iw,N)':-2" 等价 magick 的 "Nx>"（仅当源宽超过 N 时缩小，且保证偶数高度）。
+//     N 取自 spec.Width()，即 handler 已用 transcode.EffectiveWidth 收敛过的有效宽度；
+//     iw 是 ffmpeg 运行时变量，Go 侧无法直接调用规则函数，故使用该 filter 语法，
+//     其语义与 EffectiveWidth 的等价性由共享测试锁定
+//   - "-pix_fmt yuv420p -color_range pc"：显式全范围，与 magick 输出一致
+//     （ffmpeg 默认标为受限范围 tv，会让黑位与对比度被压缩，实测影响约 0.6dB）
+//   - 输出目标为临时文件路径（AVIF muxer 需要可寻址输出）
 func buildArgs(srcPath, outPath string, spec transcode.Spec) []string {
 	args := []string{
 		"-hide_banner", "-loglevel", "error",

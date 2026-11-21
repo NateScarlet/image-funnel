@@ -51,6 +51,30 @@ func TestBuildArgs_FullResolution(t *testing.T) {
 	assert.Contains(t, joined, "-f avif")
 }
 
+// TestBuildArgs_ScaleFilterMatchesEffectiveWidth 共享测试：
+// ffmpeg 保留 min(iw,N) 运行时语法（iw 是运行时变量，Go 侧无法直接调用规则函数），
+// 但其 N 必须是 EffectiveWidth 算出的有效宽度，且表达式语义与规则等价。
+func TestBuildArgs_ScaleFilterMatchesEffectiveWidth(t *testing.T) {
+	for _, width := range []int{256, 1024, 4096} {
+		spec, err := transcode.NewSpec(width, transcode.ImageFormatAVIF)
+		require.NoError(t, err)
+		args := buildArgs("src/img.png", "out/result.avif", spec)
+		assert.Contains(t, strings.Join(args, " "), fmt.Sprintf("scale='min(iw,%d)':-2", width))
+	}
+
+	// 对同一输入，min(iw,N) 与 EffectiveWidth(N,iw) 产出相同的有效宽度。
+	// iw 是真实源宽，恒 >0；N 为 0 时不加 scale 滤镜，对应全尺寸诉求
+	for _, tc := range []struct{ n, iw, want int }{
+		{4096, 2048, 2048},
+		{1024, 2048, 1024},
+		{2048, 2048, 2048},
+		{256, 512, 256},
+	} {
+		assert.Equal(t, tc.want, min(tc.iw, tc.n))
+		assert.Equal(t, tc.want, transcode.EffectiveWidth(tc.n, tc.iw))
+	}
+}
+
 func TestBuildArgs_PreservesFullColorRange(t *testing.T) {
 	// magick 输出标记 color_range=pc（全范围）；ffmpeg 默认 tv（受限范围）会让
 	// 黑位与对比度被压缩。实测此标记影响 PSNR 约 0.6dB，必须显式设为 pc

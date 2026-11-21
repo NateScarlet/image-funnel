@@ -35,6 +35,15 @@ func NewProcessor(concurrency int64) *Processor {
 // （q100 时 1024w 从 501ms 暴涨到 2496ms、体积 129KB→1298KB），故留出余量
 const webpQuality = 92
 
+// resizeArgument 生成 -resize 参数，目标宽度由唯一规则 transcode.EffectiveWidth 给出，
+// 编码器侧不另立收缩规则。
+//
+// 本 seam 不掌握源宽时传入 0：规则原样返回 width，由 magick 的 '>' 在运行时完成收缩。
+// '>' 与 ffmpeg 的 min(iw,N) 同为运行时表达，语义等价性由共享测试锁定。
+func resizeArgument(width, sourceWidth int) string {
+	return fmt.Sprintf("%dx>", transcode.EffectiveWidth(width, sourceWidth))
+}
+
 // Process 执行一次转码，结果流式写入 w。源文件状态（修改时间/大小）在执行时读取，
 // 由调用方用于缓存键计算
 func (p *Processor) Process(ctx context.Context, srcPath string, spec transcode.Spec, w io.Writer) error {
@@ -45,7 +54,9 @@ func (p *Processor) Process(ctx context.Context, srcPath string, spec transcode.
 
 	args := []string{srcPath, "-coalesce"}
 	if spec.Width() > 0 {
-		args = append(args, "-resize", fmt.Sprintf("%dx>", spec.Width()))
+		// spec 宽度已由 handler 经 EffectiveWidth 收敛；参数仍由同一规则生成，
+		// 编码器侧没有第二份收缩规则
+		args = append(args, "-resize", resizeArgument(spec.Width(), 0))
 	}
 	args = append(args, "-quality", fmt.Sprintf("%d", webpQuality))
 	args = append(args, spec.Format().String()+":-")

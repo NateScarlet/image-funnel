@@ -24,14 +24,6 @@ import (
 // GET 取回内容；两者共用同一签名 URL
 func isHEAD(r *http.Request) bool { return r.Method == http.MethodHead }
 
-// formatDecision 一次请求的响应形态：重定向到 raw URL、重定向到 w=源宽 的规范 URL，
-// 或转码为 format 指定的格式
-type formatDecision struct {
-	redirectToRaw  bool
-	canonicalWidth int // >0 表示应 302 到 w=该宽度 的规范 URL
-	format         transcode.ImageFormat
-}
-
 func handleImage(
 	logger *zap.Logger,
 	signer *urlconv.Signer,
@@ -129,66 +121,67 @@ func handleImage(
 		}
 
 		accept := r.Header.Get("Accept")
-		format := negotiateFormat(accept)
+		// format 一次请求只协商一次：缓存键与转码规格共用同一结果
+		format := TargetFormat(accept)
 
-		// w>0 时先只查变体缓存：命中即服务，整个过程不打开源图
+		// w>0 时先只查变体缓存：命中即服务，整个过程不打开源图。
+		// 查询用请求宽度——源宽此时不可知，变体键形状因此保持不变。
+		var cachedFile transcode.File
+		var cachedTiming transcode.VariantTiming
 		if width > 0 {
 			spec, err := transcode.NewSpec(width, format)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			file, variantTiming, err := coordinator.CachedVariant(r.Context(), absPath, spec)
+			cachedFile, cachedTiming, err = coordinator.CachedVariant(r.Context(), absPath, spec)
 			if err != nil {
 				handleAcquireError(w, logger, err)
 				return
 			}
-			if file != nil {
-				timing.CacheHit = variantTiming.CacheHit
-				setTimingHeader()
-				if err := serveVariantFile(w, r, format, relPath.Base(), file); err != nil {
-					handleAcquireError(w, logger, err)
-				}
+		}
+
+		input := ResponseInput{Accept: accept, Width: width, Format: format, CacheHit: cachedFile != nil}
+		if !input.CacheHit {
+			// 缓存未命中（或未指定宽度）：一次打开源图，同时取得宽度与 MIME
+			decodeStart := time.Now()
+			source, err := probe.Probe(r.Context(), absPath)
+			timing.DecodeMs = durationMs(time.Since(decodeStart))
+			if err != nil {
+				handleAcquireError(w, logger, err)
 				return
 			}
+			defer source.Reader.Close()
+			input.SourceWidth = source.Width
+			input.SourceAcceptable = util.Accepts(accept, source.ContentType)
 		}
 
-		// 缓存未命中（或未指定宽度）：一次打开源图，同时取得宽度与 MIME
-		decodeStart := time.Now()
-		source, err := probe.Probe(r.Context(), absPath)
-		timing.DecodeMs = durationMs(time.Since(decodeStart))
-		if err != nil {
-			handleAcquireError(w, logger, err)
+		// 缓存命中/未命中作为显式输入交给决策模块
+		decision := DecideResponse(input)
+		switch decision.Kind {
+		case ResponseServeCached:
+			timing.CacheHit = cachedTiming.CacheHit
+			setTimingHeader()
+			if err := serveVariantFile(w, r, decision.Format, relPath.Base(), cachedFile); err != nil {
+				handleAcquireError(w, logger, err)
+			}
 			return
-		}
-		defer source.Reader.Close()
-
-		decision := decideFormat(accept, width, source.Width, util.Accepts(accept, source.ContentType))
-		if decision.redirectToRaw {
+		case ResponseRedirectRaw:
 			setTimingHeader()
 			if err := redirectToRaw(w, signer, relPath, query); err != nil {
 				handleAcquireError(w, logger, err)
 			}
 			return
-		}
-		// 源图 MIME 不被接受时，w 超过源宽的全尺寸诉求收敛到 w=源宽 的规范 URL。
-		// 该重定向只在探源未命中变体缓存后发生，命中路径不会走到这里
-		if decision.canonicalWidth > 0 {
+		case ResponseRedirectCanonicalWidth:
 			setTimingHeader()
-			if err := redirectToCanonicalWidth(w, signer, relPath, query, decision.canonicalWidth); err != nil {
+			if err := redirectToCanonicalWidth(w, signer, relPath, query, decision.CanonicalWidth); err != nil {
 				handleAcquireError(w, logger, err)
 			}
 			return
 		}
 
-		// 有效宽度取 min(w, 源宽)：源图更窄时不放大，也让所有 w >= 源宽的请求
-		// 收敛到同一份缓存产物。宽度未知（0）时保持 w，由编码器自身的上限保证不放大
-		effectiveWidth := width
-		if width > 0 && source.Width > 0 && width > source.Width {
-			effectiveWidth = source.Width
-		}
-
-		spec, err := transcode.NewSpec(effectiveWidth, decision.format)
+		// 剩余形态为 Transcode：有效宽度由共享规则给出
+		spec, err := transcode.NewSpec(decision.EffectiveWidth, decision.Format)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -210,42 +203,10 @@ func handleImage(
 		timing.QueueMs = durationMs(variantTiming.QueueDuration)
 		timing.EncodeMs = durationMs(variantTiming.EncodeDuration)
 		setTimingHeader()
-		if err := serveVariantFile(w, r, decision.format, relPath.Base(), file); err != nil {
+		if err := serveVariantFile(w, r, decision.Format, relPath.Base(), file); err != nil {
 			handleAcquireError(w, logger, err)
 		}
 	}
-}
-
-// decideFormat 根据请求宽度、源图宽度与源图 MIME 是否被接受，决定响应形态。
-// width=0 表示未指定宽度（全尺寸诉求）；sourceWidth=0 表示源图宽度不可知，
-// 此时无法证明请求已覆盖全尺寸，只能转码
-func decideFormat(accept string, width, sourceWidth int, sourceAcceptable bool) formatDecision {
-	fullSize := width == 0 || (sourceWidth > 0 && width >= sourceWidth)
-	if fullSize && sourceAcceptable {
-		return formatDecision{redirectToRaw: true}
-	}
-	// 源图 MIME 不被接受时，全尺寸产物与 w=源宽 的转码产物字节相同；
-	// 让 w 严格大于源宽的请求 302 到该规范 URL，客户端便只占一个缓存条目。
-	// 严格大于（而非 >=）避免规范 URL 自重定向；源宽不可知（0）不重定向，保持按 w 转码
-	if !sourceAcceptable && sourceWidth > 0 && width > sourceWidth {
-		return formatDecision{canonicalWidth: sourceWidth}
-	}
-	return formatDecision{format: negotiateFormat(accept)}
-}
-
-// negotiateFormat 根据 Accept 优先级选择转码目标格式
-func negotiateFormat(accept string) transcode.ImageFormat {
-	for _, pf := range util.PreferredImageFormats(accept) {
-		switch pf {
-		case "image/avif":
-			return transcode.ImageFormatAVIF
-		case "image/webp":
-			return transcode.ImageFormatWebP
-		}
-	}
-
-	// 默认 WebP
-	return transcode.ImageFormatWebP
 }
 
 // redirectSigned 用请求自带的 t/s 与指定参数现场签名并发出 302（无 body）。
