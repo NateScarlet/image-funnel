@@ -1501,7 +1501,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         tmp_dir = tempfile.mkdtemp()
         try:
             path = self._write_workflow_sample(workflow, tmp_dir)
-            seen_prompts, _, _, _ = _load_workflow_data(
+            seen_prompts, _, _, _, _ = _load_workflow_data(
                 [path], self._make_parsed_args(region=["positive"]), "add"
             )
         finally:
@@ -3134,7 +3134,6 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
         *,
         ckpt_name: Optional[str] = "animaPencilXL_v10.safetensors",
         node_text: str = "masterpiece, Blue_Hair",
-        inference_text: str = "",
         query: str = "",
         prev_word: str = "",
         cwords: Optional[List[str]] = None,
@@ -3163,11 +3162,16 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
             workflow, prompt_meta = self._make_workflow_data(ckpt_name, node_text)
             defaults["workflow"] = workflow
             defaults["prompt_meta"] = prompt_meta
-            defaults["prompt_target"] = PromptTarget(
-                node_id="6", inference_text=inference_text or node_text
-            )
+            defaults["prompt_target"] = PromptTarget(node_id="6")
         # kwargs 最后覆盖，便于个别用例替换工作流元数据等夹具
-        return _make_context_with(**{**defaults, **kwargs})
+        merged = {**defaults, **kwargs}
+        # 访问器按最终生效的元数据构建，保证替换夹具后推理来源仍来自同一份数据
+        if merged.get("workflow") is not None and merged.get("prompt_meta") is not None:
+            merged.setdefault(
+                "prompt_accessor",
+                WorkflowPromptPair(merged["workflow"], merged["prompt_meta"]),
+            )
+        return _make_context_with(**merged)
 
     def _make_provider(
         self,

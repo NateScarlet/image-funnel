@@ -237,7 +237,7 @@ class TestServe(unittest.TestCase):
             services = AutocompleteServices(parser=get_parser(), providers=providers)
             with patch(
                 "comfyui.autocomplete._load_workflow_data",
-                return_value=({}, {"nodes": []}, fake_prompt_meta, None),
+                return_value=({}, {"nodes": []}, fake_prompt_meta, None, None),
             ):
                 suggestions = list(autocomplete(request, services))
 

@@ -275,22 +275,15 @@ class PromptFragment:
         workflow_text = self.accessor.get_workflow_node_text(self.node_id)
         if workflow_text is None:
             return None
-        prompt_text = self.accessor.get_prompt_input(self.node_id, "text")
-        if not isinstance(prompt_text, str):
-            prompt_text = ""
 
         # 与 add/remove 一致：先按节点相连模型的格式重排标签与全文
         from .model_format import format_text_for_node
 
         formatted_prompts = [
-            format_text_for_node(
-                self.accessor.prompt, self.node_id, prompt, prompt_text
-            )
+            format_text_for_node(self.accessor, self.node_id, prompt)
             for prompt in prompts
         ]
-        workflow_text = format_text_for_node(
-            self.accessor.prompt, self.node_id, workflow_text, prompt_text
-        )
+        workflow_text = format_text_for_node(self.accessor, self.node_id, workflow_text)
 
         insert_at = _locate_insert_index(workflow_text, anchor, self.region)
         if insert_at is None:
@@ -491,14 +484,10 @@ class PromptFragment:
             from .model_format import format_text_for_node
 
             prompt_str_arg = format_text_for_node(
-                self.accessor.prompt, node_id, prompt_str_arg, prompt_text
+                self.accessor, node_id, prompt_str_arg
             )
-            workflow_text = format_text_for_node(
-                self.accessor.prompt, node_id, workflow_text, prompt_text
-            )
-            prompt_text = format_text_for_node(
-                self.accessor.prompt, node_id, prompt_text, prompt_text
-            )
+            workflow_text = format_text_for_node(self.accessor, node_id, workflow_text)
+            prompt_text = format_text_for_node(self.accessor, node_id, prompt_text)
 
         stripped_workflow = strip_comments(workflow_text)
         workflow_cleaned = "\n".join(

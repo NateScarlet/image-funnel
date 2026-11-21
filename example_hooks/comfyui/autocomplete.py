@@ -30,6 +30,7 @@ from branch_directory import branch_directory_exists
 from .cancellable_http import HttpCanceledError, HttpError
 from .cancellation import CancelToken
 from .db import SQLiteContext
+from .node_accessor import NodeAccessor
 from .danbooru import (
     DanbooruTagProvider,
     SemanticLayerUnavailable,
@@ -183,14 +184,16 @@ def quote_if_needed(val: str) -> str:
 
 
 class SuggestionTextFormatter(Protocol):
-    """把补全建议文本重排为目标节点模型的提示词格式（由最外层入口构建并注入）。"""
+    """把补全建议文本重排为目标节点模型的提示词格式（由最外层入口构建并注入）。
+
+    只携带目标节点身份与数据访问器；推理文本由共享格式化链在内部派生。
+    """
 
     def format_for_node(
         self,
-        prompt_meta: Dict[str, Any],
+        accessor: NodeAccessor,
         node_id: str,
         text: str,
-        inference_text: str,
     ) -> str: ...
 
 
@@ -199,10 +202,9 @@ class NullSuggestionTextFormatter:
 
     def format_for_node(
         self,
-        prompt_meta: Dict[str, Any],
+        accessor: NodeAccessor,
         node_id: str,
         text: str,
-        inference_text: str,
     ) -> str:
         return text
 
@@ -287,15 +289,12 @@ def _parse_args_for_autocomplete(
 
 @dataclass(frozen=True)
 class PromptTarget:
-    """本次请求解析出的目标提示词节点。
+    """本次请求解析出的目标提示词节点——只携带节点身份。
 
-    node_id 用于按目标节点追溯模型格式；inference_text 是目标节点当前提示词全文，
-    作为格式推理依据——与提交路径 format_workflow_prompt_pair 的推理来源保持一致，
-    从而保证补全建议与提交后落盘的文本形态相同。
+    格式推理文本不再随目标携带，由共享格式化链按同一规则从节点数据派生。
     """
 
     node_id: str
-    inference_text: str
 
 
 def _load_workflow_data(
@@ -307,11 +306,13 @@ def _load_workflow_data(
     Optional[Dict[str, Any]],
     Optional[Dict[str, Any]],
     Optional[PromptTarget],
+    Optional[WorkflowPromptPair],
 ]:
     seen_prompts: Dict[str, str] = {}
     workflow: Optional[Dict[str, Any]] = None
     prompt_meta: Optional[Dict[str, Any]] = None
     target: Optional[PromptTarget] = None
+    pair: Optional[WorkflowPromptPair] = None
 
     for path in image_paths:
         if not os.path.isfile(path):
@@ -328,7 +329,7 @@ def _load_workflow_data(
             continue
 
     if not (workflow and prompt_meta):
-        return seen_prompts, workflow, prompt_meta, target
+        return seen_prompts, workflow, prompt_meta, target, pair
 
     is_neg = getattr(parsed_args, "neg", False) if parsed_args else False
     regions_raw = getattr(parsed_args, "region", None) if parsed_args else None
@@ -372,17 +373,8 @@ def _load_workflow_data(
     # 多目标时取第一个目标：补全建议按该目标节点的模型格式输出
     primary = primary_target(fragments_to_process)
     if primary is not None:
-        node_id = primary[0].node_id
-        # 推理来源与提交路径一致：优先 prompt 轨道文本，空时回落到 workflow 轨道文本
-        prompt_text = pair.get_prompt_input(node_id, "text")
-        workflow_text = pair.get_workflow_node_text(node_id)
-        if isinstance(prompt_text, str) and prompt_text:
-            inference_text = prompt_text
-        elif isinstance(workflow_text, str):
-            inference_text = workflow_text
-        else:
-            inference_text = ""
-        target = PromptTarget(node_id=node_id, inference_text=inference_text)
+        # 只记录目标节点身份；推理文本由共享格式化链在内部按同一规则派生
+        target = PromptTarget(node_id=primary[0].node_id)
 
     for fragment, label in fragments_to_process:
         content = fragment.text
@@ -400,7 +392,7 @@ def _load_workflow_data(
             if cleaned not in seen_prompts:
                 seen_prompts[cleaned] = label
 
-    return seen_prompts, workflow, prompt_meta, target
+    return seen_prompts, workflow, prompt_meta, target, pair
 
 
 class AutocompleteContext:
@@ -422,6 +414,7 @@ class AutocompleteContext:
         workflow: Optional[Dict[str, Any]] = None,
         prompt_meta: Optional[Dict[str, Any]] = None,
         prompt_target: Optional[PromptTarget] = None,
+        prompt_accessor: Optional[NodeAccessor] = None,
         parser: argparse.ArgumentParser,
         action: str,
         cancel_token: CancelToken,
@@ -469,6 +462,13 @@ class AutocompleteContext:
         self._workflow: Optional[Dict[str, Any]] = workflow
         self._prompt_meta: Optional[Dict[str, Any]] = prompt_meta
         self._prompt_target: Optional[PromptTarget] = prompt_target
+        # 目标节点数据访问器由入口从工作流元数据构建后注入，上下文不自行创建依赖
+        self._prompt_accessor: Optional[NodeAccessor] = prompt_accessor
+
+    @property
+    def prompt_accessor(self) -> Optional[NodeAccessor]:
+        """目标节点数据访问器（入口注入），供共享格式化链派生推理文本。"""
+        return self._prompt_accessor
 
     @property
     def parsed_args(self) -> Optional[argparse.Namespace]:
@@ -1141,13 +1141,11 @@ class DanbooruProvider(AutocompleteProvider):
         if context.action == BRANCH_ACTION:
             return _branch_tag_form(text)
 
-        prompt_meta = context.prompt_meta
+        accessor = context.prompt_accessor
         target = context.prompt_target
-        if prompt_meta is None or target is None:
+        if accessor is None or target is None:
             return text
-        return self.text_formatter.format_for_node(
-            prompt_meta, target.node_id, text, target.inference_text
-        )
+        return self.text_formatter.format_for_node(accessor, target.node_id, text)
 
     def _suggestion_text(
         self, context: AutocompleteContext, tag: str, prefix: str = ""
@@ -1561,7 +1559,7 @@ def autocomplete(
         _cleaned_cwords(request.cwords),
     )
 
-    seen_prompts, workflow, prompt_meta, target = _load_workflow_data(
+    seen_prompts, workflow, prompt_meta, target, pair = _load_workflow_data(
         request.image_paths, parsed_args, action
     )
 
@@ -1578,6 +1576,7 @@ def autocomplete(
         workflow=workflow,
         prompt_meta=prompt_meta,
         prompt_target=target,
+        prompt_accessor=pair,
         parser=services.parser,
         action=action,
         cancel_token=request.cancel_token,

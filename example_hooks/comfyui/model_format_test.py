@@ -12,11 +12,13 @@ pin_tempdir()
 from .model_format import (
     ModelFormatConfig,
     MissingDataDirError,
+    NodeTextFormatter,
     existing_tags,
     format_prompt_text,
     format_workflow_prompt_pair,
     get_config_path,
     infer_format_from_prompt,
+    inference_text_for_node,
     trace_model_name_for_node,
 )
 from .workflow_prompt_pair import WorkflowPromptPair
@@ -468,6 +470,146 @@ class TestFormatWorkflowPromptPair(unittest.TestCase):
         with patch.dict(os.environ, {"IMAGE_FUNNEL_DATA_DIR": ""}):
             with self.assertRaises(MissingDataDirError):
                 format_workflow_prompt_pair(pair)
+
+
+class TestSharedFormattingSeam(unittest.TestCase):
+    """共享 seam：补全建议与提交落盘共用「取推理文本→解析格式→重排文本」整条链。"""
+
+    def setUp(self) -> None:
+        self.tmp_dir = tempfile.mkdtemp()
+        self._env_patch = patch.dict(
+            os.environ, {"IMAGE_FUNNEL_DATA_DIR": self.tmp_dir}
+        )
+        self._env_patch.start()
+
+    def tearDown(self) -> None:
+        self._env_patch.stop()
+
+    @staticmethod
+    def _pair() -> WorkflowPromptPair:
+        workflow = {
+            "nodes": [
+                {
+                    "id": "6",
+                    "type": "CLIPTextEncode",
+                    "widgets_values": ["workflow track, blue hair"],
+                }
+            ]
+        }
+        prompt = {
+            "6": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "prompt track, blue hair", "clip": ["4", 0]},
+            },
+            "4": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": "anima.safetensors"},
+            },
+        }
+        return WorkflowPromptPair(workflow, prompt)
+
+    def test_inference_text_prefers_prompt_track(self) -> None:
+        """推理来源选择：目标节点 prompt 轨道文本非空时优先。"""
+        self.assertEqual(
+            inference_text_for_node(self._pair(), "6"), "prompt track, blue hair"
+        )
+
+    def test_inference_text_falls_back_to_workflow_track(self) -> None:
+        """prompt 轨道文本为空时回落到 workflow 轨道文本。"""
+        pair = self._pair()
+        pair.set_prompt_input("6", "text", "")
+        self.assertEqual(
+            inference_text_for_node(pair, "6"), "workflow track, blue hair"
+        )
+
+    def test_shared_seam_matches_submit_written_text(self) -> None:
+        """接口级不变量：相同元数据+目标节点+输入文本下，seam 输出与提交落盘文本逐字符相等。"""
+        config = ModelFormatConfig.load()
+        config.models["anima.safetensors"] = "anima"
+        config.save()
+        candidate = "Blue_Hair, Cat_Ears"
+
+        suggestion = NodeTextFormatter(ModelFormatConfig.load()).format_for_node(
+            self._pair(), "6", candidate
+        )
+
+        submit_pair = self._pair()
+        submit_pair.set_prompt_input("6", "text", candidate)
+        submit_pair.update_workflow_node_text("6", candidate)
+        format_workflow_prompt_pair(submit_pair)
+
+        self.assertEqual(suggestion, "blue hair, cat ears")
+        self.assertEqual(suggestion, submit_pair.get_prompt_input("6", "text"))
+        self.assertEqual(suggestion, submit_pair.get_workflow_node_text("6"))
+
+    def test_shared_seam_derives_inference_source_on_both_paths(self) -> None:
+        """无显式配置时共享 seam 与提交路径按同一推理来源得到相同文本。"""
+        pair = self._pair()
+        # prompt 轨道文本含空格证据（anima），候选为下划线形态
+        pair.set_prompt_input("6", "text", "Prompt Track, Blue_Hair, blue hair")
+        self.assertEqual(
+            NodeTextFormatter(ModelFormatConfig.load()).format_for_node(
+                pair, "6", "Blue_Hair"
+            ),
+            "blue hair",
+        )
+
+        submit_pair = self._pair()
+        submit_pair.set_prompt_input("6", "text", "Prompt Track, Blue_Hair, blue hair")
+        submit_pair.update_workflow_node_text("6", "Prompt Track, Blue_Hair, blue hair")
+        format_workflow_prompt_pair(submit_pair)
+        self.assertEqual(
+            submit_pair.get_prompt_input("6", "text"),
+            "prompt track, blue hair, blue hair",
+        )
+
+    def test_shared_seam_falls_back_to_workflow_track_for_inference(self) -> None:
+        """prompt 轨道为空时，共享 seam 回落 workflow 轨道文本做格式推理。"""
+        pair = self._pair()
+        pair.set_prompt_input("6", "text", "")
+        self.assertEqual(
+            NodeTextFormatter(ModelFormatConfig.load()).format_for_node(
+                pair, "6", "Blue_Hair"
+            ),
+            "blue hair",
+        )
+        self.assertEqual(ModelFormatConfig.load().models["anima.safetensors"], "anima")
+
+    def test_submit_path_writes_back_first_inference(self) -> None:
+        """提交路径的首次推理同样经共享模块写回配置。"""
+        format_workflow_prompt_pair(self._pair())
+        self.assertEqual(ModelFormatConfig.load().models["anima.safetensors"], "anima")
+
+    def test_default_source_does_not_write_config(self) -> None:
+        """无可推理证据时走默认格式，不写回配置。"""
+        pair = self._pair()
+        pair.set_prompt_input("6", "text", "masterpiece")
+        pair.update_workflow_node_text("6", "masterpiece")
+        format_workflow_prompt_pair(pair)
+        self.assertEqual(ModelFormatConfig.load().models, {})
+
+    def test_first_inference_writes_back_via_shared_seam(self) -> None:
+        """首次推理经共享 seam 写回配置；显式配置来源不写、disabled 原样返回。"""
+        pair = self._pair()
+        NodeTextFormatter(ModelFormatConfig.load()).format_for_node(
+            pair, "6", "Blue_Hair"
+        )
+        self.assertEqual(ModelFormatConfig.load().models["anima.safetensors"], "anima")
+
+        config = ModelFormatConfig.load()
+        config.models.clear()
+        config.models["anima.safetensors"] = "disabled"
+        config.save()
+        pair = self._pair()
+        self.assertEqual(
+            NodeTextFormatter(ModelFormatConfig.load()).format_for_node(
+                pair, "6", "Blue_Hair"
+            ),
+            "Blue_Hair",
+        )
+        self.assertEqual(
+            ModelFormatConfig.load().models, {"anima.safetensors": "disabled"}
+        )
 
 
 class TestExistingTags(unittest.TestCase):

@@ -223,7 +223,7 @@ class TestCommitCompletionConsistency(unittest.TestCase):
                 hard=False,
                 no_skip=False,
             )
-            _, _, _, target = _load_workflow_data([path], parsed, "add")
+            _, _, _, target, _ = _load_workflow_data([path], parsed, "add")
 
             pair = WorkflowPromptPair(workflow, prompt)
             commit_fragments = remix.locate_fragments(

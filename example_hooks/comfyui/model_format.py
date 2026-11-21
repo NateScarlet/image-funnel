@@ -312,54 +312,59 @@ def collect_inference_texts(prompt_meta: Optional[Dict[str, Any]]) -> Dict[str, 
     return texts
 
 
-class NodeTextFormatter:
-    """按节点（或模型）所属提示词格式重排文本，持有已加载的模型格式配置。
+def inference_text_for_node(accessor: NodeAccessor, node_id: str) -> str:
+    """选取目标节点的格式推理文本——推理来源选择的唯一规则。
 
-    供补全等只读路径使用：入口层构建配置后整体注入，核心逻辑不必读取全局环境变量。
-    格式推导与提交路径同为 resolve_format（接受首次推理后写回配置的副作用，见 ADR 0006），
-    保证补全文本与落盘文本逐字符一致。
+    优先目标节点 prompt 轨道文本（非空），否则回落到 workflow 轨道文本；两者皆空时
+    返回空串。提交路径与补全路径都通过本函数取推理文本，规则只此一处，避免两处
+    各写一遍只靠注释维系。
+    """
+    prompt_text = accessor.get_prompt_input(node_id, "text")
+    if isinstance(prompt_text, str) and prompt_text:
+        return prompt_text
+    workflow_text = accessor.get_workflow_node_text(node_id)
+    if isinstance(workflow_text, str):
+        return workflow_text
+    return ""
+
+
+class NodeTextFormatter:
+    """目标节点格式化深 module：独占「取推理文本 → 解析生效格式 → 重排文本」整条链。
+
+    由最外层入口构建并注入配置，提交路径与补全路径共用同一实例类型。格式推导走
+    resolve_format（接受首次推理写回配置的副作用，见 ADR 0006），因此同一元数据与
+    目标节点下，补全建议文本与提交落盘文本逐字符一致。
     """
 
     def __init__(self, config: ModelFormatConfig) -> None:
         self.config = config
 
-    def format(self, ckpt_name: Optional[str], text: str, inference_text: str) -> str:
-        """按指定模型的格式重排 text 文本。
+    def format_for_node(self, accessor: NodeAccessor, node_id: str, text: str) -> str:
+        """按目标节点相连模型的格式重排 text。
 
-        ckpt_name 为空（模型不可追溯）或模型为 disabled 时原样返回 text。
+        推理文本由 inference_text_for_node 在内部派生，调用方只携带目标节点身份；
+        模型不可追溯或 disabled 时原样返回 text。
         """
+        ckpt_name = trace_model_name_for_node(accessor.prompt, node_id)
         if not ckpt_name:
             return text
+        inference_text = inference_text_for_node(accessor, node_id)
         return format_prompt_text(
             text, self.config.resolve_format(ckpt_name, inference_text)
         )
 
-    def format_for_node(
-        self, prompt_meta: Dict[str, Any], node_id: str, text: str, inference_text: str
-    ) -> str:
-        """按指定节点相连模型的格式重排 text 文本。"""
-        return self.format(
-            trace_model_name_for_node(prompt_meta, node_id), text, inference_text
-        )
 
+def format_text_for_node(accessor: NodeAccessor, node_id: str, text: str) -> str:
+    """提交路径便捷入口：委托共享格式化链处理目标节点文本。
 
-def format_text_for_node(
-    prompt_meta: Dict[str, Any],
-    node_id: str,
-    text: str,
-    inference_text: Optional[str] = None,
-) -> str:
-    """按指定节点相连模型的格式重排 text 文本。
-
-    inference_text 用于格式推理（默认取 text 本身）；解析格式时若模型存在且
-    IMAGE_FUNNEL_DATA_DIR 缺失，会触发 MissingDataDirError 快速失败（不静默降级）。
-    无法追溯模型、或模型为 disabled 时原样返回 text。
+    仅当模型可追溯时才加载配置，避免无关节点因缺 IMAGE_FUNNEL_DATA_DIR 失败；模型存在
+    且数据目录缺失时触发 MissingDataDirError 快速失败（不静默降级）。不可追溯或 disabled
+    时原样返回 text。
     """
-    ckpt_name = trace_model_name_for_node(prompt_meta, node_id)
-    if not ckpt_name:
+    if not trace_model_name_for_node(accessor.prompt, node_id):
         return text
-    return NodeTextFormatter(ModelFormatConfig.load()).format(
-        ckpt_name, text, inference_text if inference_text is not None else text
+    return NodeTextFormatter(ModelFormatConfig.load()).format_for_node(
+        accessor, node_id, text
     )
 
 
@@ -377,25 +382,16 @@ def format_workflow_prompt_pair(accessor: NodeAccessor) -> None:
         if not isinstance(prompt_text, str):
             prompt_text = ""
 
-        # 推理来源：优先 prompt 轨道文本，空时回落到 workflow 轨道文本
-        if prompt_text:
-            inference_source = prompt_text
-        elif isinstance(workflow_text, str):
-            inference_source = workflow_text
-        else:
-            inference_source = ""
-
+        # 推理来源由共享格式化链内部派生，提交路径不再复刻选择规则
         if isinstance(workflow_text, str):
             accessor.update_workflow_node_text(
                 node_id,
-                format_text_for_node(
-                    prompt_meta, node_id, workflow_text, inference_source
-                ),
+                format_text_for_node(accessor, node_id, workflow_text),
             )
         accessor.set_prompt_input(
             node_id,
             "text",
-            format_text_for_node(prompt_meta, node_id, prompt_text, inference_source),
+            format_text_for_node(accessor, node_id, prompt_text),
         )
 
 
