@@ -5,7 +5,7 @@ import {
   useHotkeys,
   activeHotkeys,
   getHotkeyContext,
-  hasActiveScope,
+  getVisibleHotkeys,
   isHotkeyEnabled,
   type HotkeyBindings,
 } from "./useHotkeys";
@@ -51,6 +51,10 @@ function listedByDescription(description: string) {
   const item = activeHotkeys.value.find((entry) => entry.description === description);
   if (!item) throw new Error(`未找到快捷键声明: ${description}`);
   return item;
+}
+
+function visibleDescriptions() {
+  return getVisibleHotkeys(getHotkeyContext()).map((item) => item.description);
 }
 
 // #region 应用自身快捷键
@@ -283,6 +287,122 @@ test("scope 决定同一声明的两个上下文中当下生效的那一个", as
 
 // #endregion
 
+// #region 帮助列表的可见声明
+
+test("同一声明的多个上下文注册项按当前作用域去重，派发与帮助列表结论一致", async () => {
+  const activeScope = ref<string | undefined>(undefined);
+  const viewer = vi.fn();
+  const batch = vi.fn();
+
+  mountWithHotkeys(() => {
+    useHotkeys([], { defineScope: activeScope });
+    useHotkeys(
+      [
+        {
+          keys: "F9",
+          handler: viewer,
+          options: { description: "查看器中的钩子", declared: "hk:a" },
+        },
+      ],
+      { scope: "viewer" },
+    );
+    useHotkeys([
+      {
+        keys: "F9",
+        handler: batch,
+        options: { description: "批量栏中的钩子", declared: "hk:a" },
+      },
+    ]);
+  });
+
+  expect(visibleDescriptions()).toEqual(["批量栏中的钩子"]);
+  pressKey("F9");
+  expect(batch).toHaveBeenCalledTimes(1);
+  expect(viewer).not.toHaveBeenCalled();
+
+  activeScope.value = "viewer";
+  await nextTick();
+
+  expect(visibleDescriptions()).toEqual(["查看器中的钩子"]);
+  pressKey("F9");
+  expect(viewer).toHaveBeenCalledTimes(1);
+  expect(batch).toHaveBeenCalledTimes(1);
+});
+
+test("单上下文的多键声明不因作用域不匹配而从帮助列表消失", async () => {
+  const scope = ref<string | undefined>(undefined);
+  mountWithHotkeys(() => {
+    useHotkeys([], { defineScope: scope });
+    useHotkeys(
+      [
+        {
+          keys: ["F6", "ctrl+k"],
+          handler: () => {},
+          options: { description: "多键钩子", declared: "hk:multi" },
+        },
+      ],
+      { scope: "viewer" },
+    );
+  });
+
+  expect(visibleDescriptions()).toEqual(["多键钩子", "多键钩子"]);
+
+  scope.value = "viewer";
+  await nextTick();
+  expect(visibleDescriptions()).toEqual(["多键钩子", "多键钩子"]);
+});
+
+test("同一多键声明的两个上下文各保留当前作用域的一组键", async () => {
+  const activeScope = ref<string | undefined>(undefined);
+  mountWithHotkeys(() => {
+    useHotkeys([], { defineScope: activeScope });
+    useHotkeys(
+      [
+        {
+          keys: ["F6", "ctrl+k"],
+          handler: () => {},
+          options: { description: "查看器多键", declared: "hk:multi" },
+        },
+      ],
+      { scope: "viewer" },
+    );
+    useHotkeys([
+      {
+        keys: ["F6", "ctrl+k"],
+        handler: () => {},
+        options: { description: "批量栏多键", declared: "hk:multi" },
+      },
+    ]);
+  });
+
+  expect(visibleDescriptions()).toEqual(["批量栏多键", "批量栏多键"]);
+
+  activeScope.value = "viewer";
+  await nextTick();
+  expect(visibleDescriptions()).toEqual(["查看器多键", "查看器多键"]);
+});
+
+test("没有声明标识的快捷键不按作用域过滤", async () => {
+  const scope = ref<string | undefined>(undefined);
+  const scopedChild = defineComponent({
+    setup() {
+      useHotkeys({ F8: () => {} }, { description: "作用域内动作" });
+      return () => null;
+    },
+  });
+  mountWithHotkeys(() => {
+    useHotkeys([], { defineScope: scope });
+    return () => h(scopedChild);
+  });
+
+  scope.value = "viewer";
+  await nextTick();
+
+  expect(visibleDescriptions()).toEqual(["作用域内动作"]);
+});
+
+// #endregion
+
 // #region 响应式绑定
 
 test("绑定内容变化时整体重新注册", async () => {
@@ -374,13 +494,11 @@ test("作用域栈通过语义化只读接口访问，谓词拿到只读视图",
     useHotkeys([], { defineScope: scope });
   });
 
-  expect(hasActiveScope()).toBe(false);
   expect(getHotkeyContext().activeScopes).toEqual([]);
 
   scope.value = "viewer";
   await nextTick();
 
-  expect(hasActiveScope()).toBe(true);
   const ctx = getHotkeyContext();
   expect(ctx.topmostScope).toBe("viewer");
   expect(ctx.activeScopes).toEqual(["viewer"]);

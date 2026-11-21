@@ -250,7 +250,7 @@ import { PRESET_COLORS } from "@/composables/useImageLabel";
 import RatingSelector from "./RatingSelector.vue";
 import AppDropdown from "./AppDropdown.vue";
 import useImageHooks from "@/composables/useImageHooks";
-import { useHotkeys, hasActiveScope } from "@/composables/useHotkeys";
+import { useHotkeys } from "@/composables/useHotkeys";
 import type { ImageFragment, ImageFiltersInput } from "@/graphql/generated";
 import type { Ref, ComputedRef } from "vue";
 
@@ -323,10 +323,10 @@ const {
 });
 
 // 钩子在配置中声明的快捷键，与菜单派发同语义：按当前筛选上下文触发。
-// 查看器打开时由查看器上下文的注册项接管，两者不同时出现在快捷键列表中
+// 查看器打开时由模块内作用域匹配选出查看器上下文的注册项，调用方只描述真实启用条件。
 useHotkeys(hookHotkeys, {
   category: "钩子动作",
-  enabled: computed(() => !hasActiveScope() && !!props.bulkOps.selectedFilterBy.value),
+  enabled: computed(() => !!props.bulkOps.selectedFilterBy.value),
 });
 // #endregion
 

@@ -126,7 +126,8 @@ interface RegisteredHotkey extends HotkeyEnablement {
   preventDefault: boolean;
   stopPropagation: boolean;
   global: boolean;
-  getScope: () => string | undefined;
+  /** 生效作用域，与帮助列表共用同一作用域匹配判据 */
+  scope: MaybeRefOrGetter<string | undefined>;
   /** 声明标识，undefined 表示应用自身快捷键 */
   declared?: string;
   /** 是否已登记到帮助列表，用于决定失效状态是否需要同步到列表 */
@@ -147,6 +148,17 @@ export interface ActiveHotkey extends HotkeyEnablement {
   keys: string[][];
   description: string;
   category?: string;
+  /** 声明标识：同一声明跨上下文的多个注册项共享，供帮助列表去重 */
+  readonly declared?: string;
+  /**
+   * 规范化组合键。声明式快捷键的每个键都是独立注册项且共享声明标识，
+   * 去重必须按「声明标识 + 组合键」分组，否则单上下文的多键声明会被误判为多上下文注册。
+   */
+  readonly key: string;
+  /** 生效作用域，与派发器共用同一作用域匹配判据 */
+  readonly scope: MaybeRefOrGetter<string | undefined>;
+  /** 全局声明不受作用域约束 */
+  readonly global: boolean;
   /**
    * 失效原因。非空表示该条快捷键已被声明但当前不可用（详见 ADR 0008），
    * 此时不注册 handler，仅在帮助列表中以错误样式提示。
@@ -179,13 +191,6 @@ export function getHotkeyContext(): HotkeyContext {
 }
 
 /**
- * 当前是否存在活跃作用域。外部用于判断声明所处的派发上下文，不暴露可变栈。
- */
-export function hasActiveScope(): boolean {
-  return activeScopes.value.length > 0;
-}
-
-/**
  * 声明是否启用。派发器与帮助列表共用此判定，确保同一声明在同一状态下结论一致。
  * 作用域匹配特意不在此函数内，谓词因此无法绕过作用域约束。
  */
@@ -196,11 +201,54 @@ export function isHotkeyEnabled(declaration: HotkeyEnablement, ctx: HotkeyContex
 }
 
 /**
+ * 帮助列表可见的声明。与派发器共用启用判定和作用域匹配：
+ * 同一声明的多个上下文注册项只保留当下生效作用域的那一条；
+ * 没有声明标识的声明不按作用域过滤（ADR 0012 的决定）。
+ */
+export function getVisibleHotkeys(ctx: HotkeyContext): readonly ActiveHotkey[] {
+  // 与派发器共用启用判定，先过滤出启用的声明
+  const enabled = activeHotkeyList.value.filter((item) => isHotkeyEnabled(item, ctx));
+
+  // 仅在同一声明的同一组合键的跨上下文注册项之间去重，
+  // 不隐藏单上下文的多键声明，也不对其它声明做全局作用域过滤
+  const declarations = new Map<string, ActiveHotkey[]>();
+  for (const item of enabled) {
+    if (item.declared === undefined) continue;
+    const identity = `${item.declared}\u0000${item.key}`;
+    const group = declarations.get(identity) ?? [];
+    group.push(item);
+    declarations.set(identity, group);
+  }
+
+  const hiddenIds = new Set<string>();
+  for (const group of declarations.values()) {
+    if (group.length < 2) continue;
+    const effectiveIds = new Set(
+      group.filter((item) => matchesScope(item, ctx)).map((item) => item.id),
+    );
+    for (const item of group) {
+      if (!effectiveIds.has(item.id)) hiddenIds.add(item.id);
+    }
+  }
+
+  return enabled.filter((item) => !hiddenIds.has(item.id));
+}
+
+/**
+ * 作用域归属：派发器的注册项与帮助列表的只读条目都实现此接口，
+ * 使两处共用同一份作用域匹配判据。
+ */
+interface ScopeAttribution {
+  readonly global: boolean;
+  readonly scope: MaybeRefOrGetter<string | undefined>;
+}
+
+/**
  * 作用域匹配：全局快捷键不受限，其余声明只在最顶层作用域与之相同时生效。
  */
-function matchesScope(hotkey: RegisteredHotkey, ctx: HotkeyContext): boolean {
+function matchesScope(hotkey: ScopeAttribution, ctx: HotkeyContext): boolean {
   if (hotkey.global) return true;
-  const scope = hotkey.getScope();
+  const scope = toValue(hotkey.scope);
   return ctx.topmostScope !== undefined ? scope === ctx.topmostScope : scope === undefined;
 }
 
@@ -432,7 +480,7 @@ function registerSingleHotkey(
     enabled,
     enabledWhen,
     global,
-    getScope: () => (scope !== undefined ? toValue(scope) : undefined),
+    scope,
     declared,
     listedInHelp: !!description,
   };
@@ -449,6 +497,10 @@ function registerSingleHotkey(
         category,
         enabled,
         enabledWhen,
+        declared,
+        key: combinations.length > 0 ? combinationKey(combinations[0]) : "",
+        scope,
+        global,
       },
     ];
   }

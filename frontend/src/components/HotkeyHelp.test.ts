@@ -113,3 +113,48 @@ test("帮助列表展示所有作用域的快捷键，不因当前作用域改�
   expect(wrapper.text()).toContain("作用域内动作");
   expect(wrapper.text()).toContain("无作用域动作");
 });
+
+test("同一声明的多个上下文注册项在帮助列表中只显示当前生效的那一条", async () => {
+  const activeScope = ref<string | undefined>(undefined);
+  const wrapper = mount(
+    defineComponent({
+      setup() {
+        useHotkeys([], { defineScope: activeScope });
+        useHotkeys(
+          [
+            {
+              keys: "F9",
+              handler: () => {},
+              options: {
+                description: "查看器中的钩子",
+                declared: "hk:a",
+              },
+            },
+          ],
+          { category: "钩子动作", scope: "viewer" },
+        );
+        useHotkeys(
+          [
+            {
+              keys: "F9",
+              handler: () => {},
+              options: { description: "批量栏中的钩子", declared: "hk:a" },
+            },
+          ],
+          { category: "钩子动作" },
+        );
+        return () => h(HotkeyHelp);
+      },
+    }),
+  );
+  wrappers.push(wrapper);
+
+  expect(wrapper.text()).toContain("批量栏中的钩子");
+  expect(wrapper.text()).not.toContain("查看器中的钩子");
+
+  activeScope.value = "viewer";
+  await nextTick();
+
+  expect(wrapper.text()).toContain("查看器中的钩子");
+  expect(wrapper.text()).not.toContain("批量栏中的钩子");
+});
