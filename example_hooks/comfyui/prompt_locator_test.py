@@ -6,7 +6,6 @@ import unittest
 from .prompt_locator import (
     find_terminal_input,
     get_region_markers,
-    get_target_clip_node,
     is_node_disabled,
     find_region_boundaries,
     get_region_content,
@@ -85,41 +84,6 @@ class TestPromptLocator(unittest.TestCase):
         start, end = get_region_markers("positive")
         self.assertEqual(start, "// #region positive")
         self.assertEqual(end, "// #endregion positive")
-
-    def test_get_target_clip_node_no_locator(self):
-        prompt = {
-            "node_1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "1girl, masterpiece, score_7, cute"},
-            },
-            "node_2": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "best quality, landscape"},
-            },
-            "node_3": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "simple background"},
-            },
-        }
-        target = get_target_clip_node(prompt, is_neg=False)
-        self.assertEqual(target, "node_1")
-
-        prompt_neg = {
-            "node_1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "worst quality, low quality"},
-            },
-            "node_2": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "bad hands, error, score_3"},
-            },
-            "node_3": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "worst quality, low quality, score_1"},
-            },
-        }
-        target_neg = get_target_clip_node(prompt_neg, is_neg=True)
-        self.assertEqual(target_neg, "node_3")
 
 
 class TestIsNodeDisabled(unittest.TestCase):

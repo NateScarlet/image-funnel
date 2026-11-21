@@ -26,6 +26,11 @@ from typing import (
 
 from graphql_utils import GraphQLClient, ProgressUpdate, progress_notification
 from .prompt_fragment import PromptFragment, RemovalHit
+from .prompt_target import (
+    clip_text_encode_node_ids,
+    primary_target,
+    region_names_in_text,
+)
 from .seed_manager import SeedManager
 from .weight_manager import WeightManager
 from .workflow_prompt_pair import WorkflowPromptPair
@@ -378,7 +383,7 @@ def _remove_from_clip_nodes(
     返回 None。命中位置由移除本身产出，与移除共用同一份文本快照，不再单独预扫描。
     """
     hits: List[RemovalHit] = []
-    for node_id in _clip_text_encode_nodes(pair.prompt):
+    for node_id in clip_text_encode_node_ids(pair.prompt):
         fragment = PromptFragment(pair, node_id)
         for spelling in _spellings(prompts):
             hits.extend(
@@ -418,7 +423,7 @@ def _add_tags(
             return
         # 锚点依附行在中间编辑后已不存在：回落默认目标
 
-    fragment = next(iter(fragments), None)
+    fragment = primary_target(fragments)
     if fragment is None:
         return
 
@@ -436,16 +441,6 @@ def _add_tags(
 # #region CLIPTextEncode 节点辅助
 
 
-def _clip_text_encode_nodes(prompt: Dict[str, Any]) -> List[str]:
-    """返回 prompt 中所有 CLIPTextEncode 类型节点的 ID 列表"""
-    return [
-        nid
-        for nid, node in prompt.items()
-        if isinstance(node, dict)
-        and cast(Dict[str, Any], node).get("class_type") == "CLIPTextEncode"
-    ]
-
-
 def _remove_from_other_regions(
     pair: WorkflowPromptPair,
     prompt_str: str,
@@ -454,21 +449,14 @@ def _remove_from_other_regions(
     request: RemixRequest,
 ) -> None:
     """从目标节点中非目标区域移除重复的提示词（与移除动作相同的匹配逻辑）。"""
-    from .prompt_locator import REGION_START_RE
-
     spellings = _spellings([prompt_str])
 
     wf_text = pair.get_workflow_node_text(target_node_id)
     if not wf_text:
         return
 
-    # 扫描目标节点中的所有区域
-    all_regions: Set[str] = set()
-    for m in REGION_START_RE.finditer(wf_text):
-        all_regions.add(m.group(1))
-
-    # 从非目标区域移除
-    for region in all_regions:
+    # 区域标记提取与区域边界判定同属目标定位深 module
+    for region in region_names_in_text(wf_text):
         if region == target_region:
             continue
         fragment = PromptFragment(pair, target_node_id, region=region)

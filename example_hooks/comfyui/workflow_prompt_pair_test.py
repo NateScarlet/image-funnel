@@ -28,10 +28,7 @@ pin_tempdir()
 from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_comment import strip_comments
 from .prompt_fragment import PromptFragment
-from .prompt_locator import (
-    get_workflow_node_text,
-    get_target_clip_node,
-)
+from .prompt_locator import get_workflow_node_text
 from .seed_manager import SeedManager
 from .filename_manager import FilenameManager
 from .weight_manager import WeightManager
@@ -1514,13 +1511,14 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                 workflow = json.loads(workflow_str)
 
                 is_neg = False
-                target_node_id = get_target_clip_node(prompt, is_neg)
-                if target_node_id is None:
-                    continue
 
                 region_name = "positive"
 
                 pair = WorkflowPromptPair(workflow, prompt)
+                located = next(iter(pair.locate_prompts(is_neg=is_neg)), None)
+                if located is None:
+                    continue
+                target_node_id = located.node_id
                 fragment = PromptFragment(pair, target_node_id, region=region_name)
 
                 # --- 第一次 add "beautiful scenery" ---
@@ -1778,11 +1776,12 @@ class TestWorkflowPromptPairIntegration(unittest.TestCase):
                     prompt = json.loads(img.info["prompt"])
                     workflow = json.loads(img.info["workflow"])
 
-                target_node_id = get_target_clip_node(prompt, is_neg=False)
-                if target_node_id is None:
-                    continue
-
                 pair = WorkflowPromptPair(workflow, prompt)
+                default_target = next(iter(pair.locate_prompts(is_neg=False)), None)
+                if default_target is None:
+                    continue
+                # 与收敛前一致：按默认目标节点 id 再定位一次，得到无 region 的整节点片段
+                target_node_id = default_target.node_id
                 target_nodes = list(
                     pair.locate_prompts(nodes=[target_node_id], is_neg=False)
                 )

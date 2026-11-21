@@ -18,6 +18,7 @@ from typing import (
 
 from .node_accessor import NodeAccessor
 from .prompt_comment import iter_prompt_segments
+from .prompt_target import clip_text_encode_node_ids
 
 _SCORE_TAG_PATTERN = re.compile(r"\bscore_[0-9]+(?:_[a-z0-9]+)*\b", re.IGNORECASE)
 
@@ -287,16 +288,6 @@ def trace_model_name_for_node(
         continue
 
     return None
-
-
-def clip_text_encode_node_ids(prompt_meta: Dict[str, Any]) -> List[str]:
-    """返回 prompt 中所有 CLIPTextEncode 类型节点的 ID 列表。"""
-    return [
-        str(nid)
-        for nid, node in prompt_meta.items()
-        if isinstance(node, dict)
-        and cast(Dict[str, Any], node).get("class_type") == "CLIPTextEncode"
-    ]
 
 
 def collect_inference_texts(prompt_meta: Optional[Dict[str, Any]]) -> Dict[str, str]:

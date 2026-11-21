@@ -15,10 +15,7 @@ from .output_directory import (
     resolve_output_rel_dir,
 )
 from .prompt_comment import strip_comments
-from .prompt_locator import (
-    get_workflow_node_text,
-    get_target_clip_node,
-)
+from .prompt_locator import get_workflow_node_text
 
 
 class TestComfyUIHook(unittest.TestCase):
@@ -102,130 +99,6 @@ class TestComfyUIHook(unittest.TestCase):
                             pr_lines,
                             f"Equivalence failed for node {nid} in {png_path}.\nWorkflow stripped:\n{wf_lines}\nPrompt actual:\n{pr_lines}",
                         )
-
-    def test_get_target_clip_node_no_locator(self):
-        # 模拟没有 KSampler 连线（即没有定位符）的情况，测试通过关键词匹配查找最佳 CLIPTextEncode
-        # 1. 测试正面提示词匹配
-        prompt = {
-            "node_1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "1girl, masterpiece, score_7, cute"},
-            },
-            "node_2": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "best quality, landscape"},
-            },
-            "node_3": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "simple background"},
-            },
-        }
-
-        # 默认正面关键词为 masterpiece, best quality, score_7
-        # node_1 匹配 2 个: masterpiece, score_7
-        # node_2 匹配 1 个: best quality
-        # node_3 匹配 0 个
-        # 预期选中 node_1
-        target = get_target_clip_node(prompt, is_neg=False)
-        self.assertEqual(target, "node_1")
-
-        # 2. 测试反向提示词匹配
-        prompt_neg = {
-            "node_1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "worst quality, low quality"},
-            },
-            "node_2": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "bad hands, error, score_3"},
-            },
-            "node_3": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "worst quality, low quality, score_1"},
-            },
-        }
-        # 默认负面关键词为 worst quality, low quality, score_1, score_2, score_3
-        # node_1 匹配 2 个: worst quality, low quality
-        # node_2 匹配 1 个: score_3
-        # node_3 匹配 3 个: worst quality, low quality, score_1
-        # 预期选中 node_3
-        target_neg = get_target_clip_node(prompt_neg, is_neg=True)
-        self.assertEqual(target_neg, "node_3")
-
-        # 3. 测试平局时，选取文本长度较长的那个
-        prompt_tie = {
-            "node_1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "masterpiece, short text"},
-            },
-            "node_2": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {
-                    "text": "masterpiece, this is a much longer text to break the tie"
-                },
-            },
-        }
-        # 两者都匹配 1 个: masterpiece
-        # 预期选中更长的 node_2
-        target_tie = get_target_clip_node(prompt_tie, is_neg=False)
-        self.assertEqual(target_tie, "node_2")
-
-        # 4. 测试自定义关键词环境变量
-        os.environ["HOOK_POSITIVE_KEYWORDS"] = "custom_kw1, custom_kw2"
-        prompt_custom = {
-            "node_1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "custom_kw1, simple text"},
-            },
-            "node_2": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "custom_kw1, custom_kw2"},
-            },
-        }
-        try:
-            target_custom = get_target_clip_node(prompt_custom, is_neg=False)
-            self.assertEqual(target_custom, "node_2")
-        finally:
-            del os.environ["HOOK_POSITIVE_KEYWORDS"]
-
-        # 5. 测试空格与下划线等价性匹配
-        os.environ["HOOK_POSITIVE_KEYWORDS"] = "best quality, score_7"
-        prompt_eq = {
-            # 匹配 best quality (通过 best_quality) 和 score_7 (匹配 score_7) -> 匹配 2 个
-            "node_1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "masterpiece, best_quality, score_7"},
-            },
-            # 仅匹配 score_7 (通过 score 7) -> 匹配 1 个
-            "node_2": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "score 7, simple text"},
-            },
-        }
-        try:
-            target_eq = get_target_clip_node(prompt_eq, is_neg=False)
-            self.assertEqual(target_eq, "node_1")
-        finally:
-            del os.environ["HOOK_POSITIVE_KEYWORDS"]
-
-        os.environ["HOOK_NEGATIVE_KEYWORDS"] = "worst_quality, low quality"
-        prompt_eq_neg = {
-            # 仅匹配 low quality (通过 low_quality)
-            "node_1": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "low_quality, safe text"},
-            },
-            # 匹配 worst_quality (通过 worst quality) 和 low quality (通过 low quality) -> 匹配 2 个
-            "node_2": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {"text": "worst quality, low quality"},
-            },
-        }
-        try:
-            target_eq_neg = get_target_clip_node(prompt_eq_neg, is_neg=True)
-            self.assertEqual(target_eq_neg, "node_2")
-        finally:
-            del os.environ["HOOK_NEGATIVE_KEYWORDS"]
 
     def test_main_no_images(self):
         from unittest.mock import patch, MagicMock

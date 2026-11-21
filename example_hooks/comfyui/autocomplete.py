@@ -43,11 +43,16 @@ from .danbooru_env import (
     hook_db_path,
 )
 
-# 从 comfyui 业务脚本中导入现成的 workflow 和 Lora 解析提取逻辑
+# 从 comfyui 业务脚本中导入现成的 Lora 解析提取逻辑；区域标记提取归属目标定位深 module
 from .__main__ import (
-    extract_region_names,
     extract_lora_names,
     get_parser,
+)
+from .prompt_target import (
+    clip_text_encode_node_ids,
+    extract_region_names,
+    primary_target,
+    target_specs,
 )
 from .workflow_prompt_pair import WorkflowPromptPair
 from .prompt_fragment import PromptFragment
@@ -344,25 +349,13 @@ def _load_workflow_data(
 
     if action == REMOVE_ACTION:
         # 移除已无范围概念：候选来自所有 CLIPTextEncode 节点
-        clip_nodes = [
-            nid
-            for nid, node in prompt_meta.items()
-            if cast(Dict[str, Any], node).get("class_type") == "CLIPTextEncode"
-        ]
-        for nid in clip_nodes:
+        for nid in clip_text_encode_node_ids(prompt_meta):
             fragments_to_process.append((PromptFragment(pair, nid), f"节点: {nid}"))
     else:
-        raw_targets: List[Tuple[str, str]] = []
-        for nid in nodes_arg:
-            raw_targets.append(("node", nid))
-        for rname in regions_arg:
-            raw_targets.append(("region", rname))
-
-        if not raw_targets:
-            default_region = "negative" if is_neg else "positive"
-            raw_targets.append(("region", default_region))
-
-        for target_type, target_value in raw_targets:
+        # 显式目标优先、默认区域按极性：目标序列由定位深 module 统一派生。
+        # 这里仍逐个 spec 调用 locate_prompts：建议的 description 要按原始 spec
+        # 标注来源，而非按解析后的片段标注，标签文案属于既有可观察行为。
+        for target_type, target_value in target_specs(nodes_arg, regions_arg, is_neg):
             nodes = nodes_arg if target_type == "node" else None
             regions = [target_value] if target_type == "region" else None
 
@@ -377,8 +370,9 @@ def _load_workflow_data(
                 fragments_to_process.append((fragment, label))
 
     # 多目标时取第一个目标：补全建议按该目标节点的模型格式输出
-    if fragments_to_process:
-        node_id = fragments_to_process[0][0].node_id
+    primary = primary_target(fragments_to_process)
+    if primary is not None:
+        node_id = primary[0].node_id
         # 推理来源与提交路径一致：优先 prompt 轨道文本，空时回落到 workflow 轨道文本
         prompt_text = pair.get_prompt_input(node_id, "text")
         workflow_text = pair.get_workflow_node_text(node_id)

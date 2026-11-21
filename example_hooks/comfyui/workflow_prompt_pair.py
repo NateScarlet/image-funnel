@@ -9,15 +9,14 @@ WorkflowPromptPair：ComfyUI workflow 和 prompt 配对容器。
 """
 
 import logging
-from typing import Dict, List, Any, Optional, Iterator, Tuple, cast
+from typing import Dict, List, Any, Optional, Iterator, cast
 
 from .prompt_locator import (
-    REGION_START_RE,
-    get_target_clip_node,
     NodeInfo,
     is_node_disabled,
 )
 from .prompt_fragment import PromptFragment
+from .prompt_target import locate_targets
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -303,47 +302,8 @@ class WorkflowPromptPair:
         regions: Optional[List[str]] = None,
         is_neg: bool = False,
     ) -> Iterator[PromptFragment]:
-        raw_targets: List[Tuple[str, str]] = []
-        if nodes:
-            for n in nodes:
-                raw_targets.append(("node", n))
-        if regions:
-            for r in regions:
-                raw_targets.append(("region", r))
-        if not raw_targets:
-            raw_targets.append(("region", "negative" if is_neg else "positive"))
-        for tt, tv in raw_targets:
-            yield from self._resolve_target_to_nodes(tt, tv, is_neg)
-
-    def _find_nodes_with_region(self, region_name: str) -> List[str]:
-        result: List[str] = []
-        for nid, raw_node in self._prompt.items():
-            node = cast(Dict[str, Any], raw_node)
-            if node.get("class_type") == "CLIPTextEncode":
-                wf_text = self.get_workflow_node_text(nid)
-                if wf_text:
-                    for m in REGION_START_RE.finditer(wf_text):
-                        if m.group(1) == region_name:
-                            result.append(nid)
-                            break
-        return result
-
-    def _resolve_target_to_nodes(
-        self,
-        target_type: str,
-        target_value: str,
-        is_neg: bool,
-    ) -> List[PromptFragment]:
-        if target_type == "node":
-            if target_value not in self._prompt:
-                return []
-            return [PromptFragment(self, target_value)]
-        matching = self._find_nodes_with_region(target_value)
-        if matching:
-            return [PromptFragment(self, n, region=target_value) for n in matching]
-        fallback = get_target_clip_node(self._prompt, is_neg)
-        if fallback:
-            return [PromptFragment(self, fallback, region=target_value)]
-        return []
+        """目标定位的唯一 seam：规则由 prompt_target 深 module 统一实现。"""
+        for node_id, region in locate_targets(self, nodes, regions, is_neg):
+            yield PromptFragment(self, node_id, region=region)
 
     # #endregion

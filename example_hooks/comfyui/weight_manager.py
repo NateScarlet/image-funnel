@@ -14,6 +14,7 @@ from .prompt_locator import (
 )
 from .lora_handler import LORA_HANDLERS
 from .prompt_fragment import PromptFragment
+from .prompt_target import primary_target
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -230,9 +231,12 @@ class WeightManager:
 
         if any_existing_modified or skip_add:
             return any_existing_modified
-        if fragments:
-            return fragments[0].modify_weight(target_prompt, weight, skip_add=False)
-        return False
+        fragment = primary_target(fragments)
+        return (
+            fragment.modify_weight(target_prompt, weight, skip_add=False)
+            if fragment
+            else False
+        )
 
     # #endregion
 
