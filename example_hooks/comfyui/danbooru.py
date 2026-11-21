@@ -27,6 +27,11 @@ from .danbooru_data import (
     normalize_literal,
     strip_symbols,
 )
+from .danbooru_literal_tier import (
+    STRONG_TIERS,
+    LiteralHitTier,
+    should_activate_semantic_layer,
+)
 from .danbooru_embedding import (
     CEILING_COSINE,
     MIN_COSINE,
@@ -211,20 +216,18 @@ def _normalize_literal(text: str) -> str:
 
 @dataclass(frozen=True)
 class _LiteralMatch:
-    """字面匹配结果：排序分 + 命中档次标记。
+    """字面匹配结果：排序分 + 显式命中档次。
 
-    档次标记独立于分数，调用方不得再从分数反推：
-    - strong：查询与标签名或中文别名精确相等（含剥离符号后相等）
-    - prefix_hit：查询是标签名或中文别名的前缀（含剥离符号后构成前缀）
+    档次由打分层标注，独立于分数，调用方不得从分数反推。
+    EXACT / CN_EXACT 为强匹配，PREFIX / CN_PREFIX 为前缀命中，
     两者都表示用户意图已足够明确，语义层据此让路。
     """
 
     score: float
-    strong: bool
-    prefix_hit: bool
+    tier: LiteralHitTier
 
 
-_NO_MATCH = _LiteralMatch(0.0, False, False)
+_NO_MATCH = _LiteralMatch(0.0, LiteralHitTier.NONE)
 
 # 字面匹配各档分数；剥后相等/前缀分别沿用对应档，同分按标签热度排序
 _SCORE_NAME_EXACT = 100.0
@@ -253,24 +256,24 @@ def _score_literal_match(
     q0 = query_norm[0]
     name = record.name_norm
     if name == query_norm:
-        return _LiteralMatch(_SCORE_NAME_EXACT, True, False)
+        return _LiteralMatch(_SCORE_NAME_EXACT, LiteralHitTier.EXACT)
     if query_norm in record.cn_aliases_norm:
-        return _LiteralMatch(_SCORE_CN_EXACT, True, False)
+        return _LiteralMatch(_SCORE_CN_EXACT, LiteralHitTier.CN_EXACT)
     if name.startswith(query_norm):
-        return _LiteralMatch(_SCORE_NAME_PREFIX, False, True)
+        return _LiteralMatch(_SCORE_NAME_PREFIX, LiteralHitTier.PREFIX)
     for alias in record.cn_aliases_norm:
         if alias.startswith(query_norm):
-            return _LiteralMatch(_SCORE_CN_PREFIX, False, True)
+            return _LiteralMatch(_SCORE_CN_PREFIX, LiteralHitTier.CN_PREFIX)
     if q0 in name and query_norm in name:
-        return _LiteralMatch(_SCORE_NAME_SUBSTRING, False, False)
+        return _LiteralMatch(_SCORE_NAME_SUBSTRING, LiteralHitTier.SUBSTRING)
     for alias in record.cn_aliases_norm:
         if q0 in alias and query_norm in alias:
-            return _LiteralMatch(_SCORE_CN_SUBSTRING, False, False)
+            return _LiteralMatch(_SCORE_CN_SUBSTRING, LiteralHitTier.CN_SUBSTRING)
     if not allow_fuzzy:
         return _NO_MATCH
     if len(query_norm) > _FUZZY_MAX_QUERY_LEN:
         return _NO_MATCH
-    return _LiteralMatch(_score_fuzzy_match(query_norm, record), False, False)
+    return _LiteralMatch(_score_fuzzy_match(query_norm, record), LiteralHitTier.FUZZY)
 
 
 def _fuzzy_ratio(query: str, candidate: str) -> float:
@@ -379,8 +382,8 @@ class FileDanbooruTagProvider:
         # rec_id -> scored 下标；剥后层命中同一记录时用于升级分数而不是重复入列
         scored_pos: Dict[int, int] = {}
         candidate_count = 0
-        has_strong_match = False
-        has_prefix_hit = False
+        # 汇总本次查询命中的最高档次；强匹配 / 前缀命中判断与语义层门控都从它派生
+        highest_tier = LiteralHitTier.NONE
         for record in index.records:
             if record.nsfw and not show_nsfw:
                 continue
@@ -392,14 +395,11 @@ class FileDanbooruTagProvider:
                 # 模糊分 <=65，子串(65)及以上已能占满 top20 时无需模糊
                 if match.score >= 65:
                     candidate_count += 1
-                if match.strong:
-                    has_strong_match = True
-                if match.prefix_hit:
-                    has_prefix_hit = True
+                highest_tier = max(highest_tier, match.tier)
 
         def merge_stripped(rec_id: int, hit: _LiteralMatch) -> None:
             """合并剥后层命中：新记录直接入列，已命中记录仅在层级更高时升级。"""
-            nonlocal candidate_count, has_strong_match, has_prefix_hit
+            nonlocal candidate_count, highest_tier
             pos = scored_pos.get(rec_id)
             if pos is not None:
                 if -hit.score >= scored[pos][0]:
@@ -413,10 +413,7 @@ class FileDanbooruTagProvider:
                 matched_ids.add(rec_id)
                 # 剥后层最低 75 分，必然计入「已占满候选」的判定
                 candidate_count += 1
-            if hit.strong:
-                has_strong_match = True
-            if hit.prefix_hit:
-                has_prefix_hit = True
+            highest_tier = max(highest_tier, hit.tier)
 
         # 剥后层：在预计算列表上做紧凑 startswith 扫描（50k 条约 2ms），
         # 不逐条塞进上面的打分函数，否则每次查询都会多出十几毫秒解释器开销。
@@ -432,8 +429,7 @@ class FileDanbooruTagProvider:
                     rec_id,
                     _LiteralMatch(
                         _SCORE_NAME_EXACT if is_exact else _SCORE_NAME_PREFIX,
-                        is_exact,
-                        not is_exact,
+                        LiteralHitTier.EXACT if is_exact else LiteralHitTier.PREFIX,
                     ),
                 )
             for stripped, rec_id in index.stripped_aliases:
@@ -446,15 +442,18 @@ class FileDanbooruTagProvider:
                     rec_id,
                     _LiteralMatch(
                         _SCORE_CN_EXACT if is_exact else _SCORE_CN_PREFIX,
-                        is_exact,
-                        not is_exact,
+                        (
+                            LiteralHitTier.CN_EXACT
+                            if is_exact
+                            else LiteralHitTier.CN_PREFIX
+                        ),
                     ),
                 )
 
         # 第二趟：仅当没有精确命中、候选不足且查询足够短时，在长度邻域补模糊
         if (
             candidate_count < 20
-            and not has_strong_match
+            and highest_tier not in STRONG_TIERS
             and len(query_norm) <= _FUZZY_MAX_QUERY_LEN
         ):
             max_delta = max(3, len(query_norm) // 2)
@@ -472,12 +471,12 @@ class FileDanbooruTagProvider:
                         scored.append((-fuzzy, -record.post_count, record))
                         matched_ids.add(record.rec_id)
 
-        # 语义层：仅当字面层没有强匹配（精确）也没有前缀命中时追加；
+        # 语义层：追加与否由纯决策函数按最高档次与 skip_semantic 判定；
         # 接口超时或失败时降级为「字面结果 + 明确错误提示项」，补全不中断。
         # skip_semantic 由调用方按耗时预算决定（如前端先上屏字面候选再补语义），
         # 跳过时整段不执行：不发嵌入请求，也不产出降级提示项
         semantic_unavailable: Optional[str] = None
-        if not has_strong_match and not has_prefix_hit and not skip_semantic:
+        if should_activate_semantic_layer(highest_tier, skip_semantic):
             try:
                 hits = self.semantic.search(
                     query.strip(), _SEMANTIC_TOP_K, cancel_token=cancel_token
