@@ -15,6 +15,7 @@ import (
 	"main/internal/application/image"
 	"main/internal/domain/relpath"
 	"main/internal/scalar"
+	"main/internal/shared/imageversion"
 )
 
 // ImageURLPrefix 图片访问 URL 的路径前缀，形如 /image/<sig>/<relPath>?<params>。
@@ -64,14 +65,16 @@ func (s *Signer) GenerateSignedURL(absPath string, opts ...image.SignOption) (sc
 		return scalar.URI{}, fmt.Errorf("failed to get file info: %w", err)
 	}
 
+	// 图片版本只由 shared/imageversion 定义；签名身份取其中的秒级+大小视图，
+	// 同一路径的文件被替换后即另一版本，其 URL 必须随之失效
+	identity := imageversion.New(fileInfo).Second()
+
 	params := url.Values{}
 	for _, opt := range opts {
 		opt(params)
 	}
-	// 修改时间与大小是图片身份的一部分（见 domain/image 的 ID 编码）：
-	// 同一路径的文件被替换后即另一张图片，其 URL 必须随之失效
-	params.Set("t", fmt.Sprintf("%d", fileInfo.ModTime().Unix()))
-	params.Set("s", fmt.Sprintf("%d", fileInfo.Size()))
+	params.Set("t", fmt.Sprintf("%d", identity.ModUnix))
+	params.Set("s", fmt.Sprintf("%d", identity.Size))
 
 	return s.SignURL(rel, params)
 }
@@ -201,18 +204,18 @@ func (s *Signer) verifyIdentity(rel relpath.Path, payload string) error {
 		return fmt.Errorf("stat image: %w", err)
 	}
 
-	if declared.modUnix != info.ModTime().Unix() || declared.size != info.Size() {
+	// 校验与签发共用同一图片版本定义，精度与字段不会各自演进
+	actual := imageversion.New(info).Second()
+	if declared != actual {
 		return fmt.Errorf("%w: declared t=%d s=%d, actual t=%d s=%d",
-			ErrStaleIdentity, declared.modUnix, declared.size, info.ModTime().Unix(), info.Size())
+			ErrStaleIdentity, declared.ModUnix, declared.Size, actual.ModUnix, actual.Size)
 	}
 	return nil
 }
 
-// imageIdentity URL 声明的图片身份：秒级修改时间与字节大小
-type imageIdentity struct {
-	modUnix int64
-	size    int64
-}
+// imageIdentity 是 URL 声明的图片身份。直接复用共享图片版本的秒级视图，
+// 使声明与磁盘现状的比较发生在同一类型上
+type imageIdentity = imageversion.SecondView
 
 // parseIdentity 从已验签的载荷中取回 t/s。
 // 参数缺失、空串或无法解析为整数时返回错误，由调用方按身份不一致处理。
@@ -240,7 +243,7 @@ func parseIdentity(payload string) (imageIdentity, error) {
 	if err != nil {
 		return imageIdentity{}, fmt.Errorf("invalid s %q: %w", sStr, err)
 	}
-	return imageIdentity{modUnix: modUnix, size: size}, nil
+	return imageIdentity{ModUnix: modUnix, Size: size}, nil
 }
 
 // originForm 取得请求目标串中 origin-form 部分的起始下标。

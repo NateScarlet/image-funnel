@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"main/internal/application/image"
+	"main/internal/shared/imageversion"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -295,6 +296,26 @@ func TestValidate_TamperedTimestampFails(t *testing.T) {
 }
 
 // #region 图片身份（t/s）与磁盘现状比对
+
+// t/s 必须直接来自共享图片版本的秒级+大小视图，而不是签名器另算一套精度/字段，
+// 否则授权失效判定会与变体缓存 key 的判据各自漂移
+func TestGenerateSignedURL_IdentityFromSharedVersion(t *testing.T) {
+	signer, rootDir := newTestSigner(t)
+	path := filepath.Join(rootDir, "photo.jpg")
+	writeSource(t, path)
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	want := imageversion.New(info).Second()
+
+	signedURL, err := signer.GenerateSignedURL(path)
+	require.NoError(t, err)
+	_, _, rawQuery := splitSignedURL(t, signedURL.String())
+	q, err := url.ParseQuery(rawQuery)
+	require.NoError(t, err)
+	assert.Equal(t, fmt.Sprintf("%d", want.ModUnix), q.Get("t"))
+	assert.Equal(t, fmt.Sprintf("%d", want.Size), q.Get("s"))
+}
 
 // realIdentityQuery 构造与文件当前状态一致的 t/s 查询串（秒级修改时间 + 字节大小）
 func realIdentityQuery(t *testing.T, path string) (tStr, sStr string) {

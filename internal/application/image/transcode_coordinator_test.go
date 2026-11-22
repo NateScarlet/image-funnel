@@ -14,6 +14,7 @@ import (
 
 	"main/internal/infrastructure/inmem"
 	"main/internal/shared"
+	"main/internal/shared/imageversion"
 	"main/internal/shared/transcode"
 
 	"github.com/stretchr/testify/assert"
@@ -315,6 +316,37 @@ func TestVariantKey_TouchFileChangesKey(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NotEqual(t, key1, key2, "modTime change must change variant key")
+}
+
+// 变体 key 的 mtime/size 分量必须来自共享图片版本的纳秒视图：
+// 纳秒视图变化则 key 变化，无关输入不变则 key 不变
+func TestVariantKey_UsesSharedNanoVersion(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "a.png")
+	require.NoError(t, os.WriteFile(src, []byte("image"), 0o644))
+
+	spec, err := transcode.NewSpec(1024, transcode.ImageFormatWebP)
+	require.NoError(t, err)
+
+	info, err := os.Stat(src)
+	require.NoError(t, err)
+	nano1 := imageversion.New(info).Nano()
+
+	key1, err := VariantKey(src, spec, EncoderMagick)
+	require.NoError(t, err)
+	key2, err := VariantKey(src, spec, EncoderMagick)
+	require.NoError(t, err)
+	assert.Equal(t, key1, key2, "无关输入不变时 key 必须不变")
+
+	// 仅亚秒级修改时间变化：秒级视图不变，但纳秒视图变化，key 必须随之变化
+	future := info.ModTime().Add(500 * time.Millisecond)
+	require.NoError(t, os.Chtimes(src, future, future))
+	info2, err := os.Stat(src)
+	require.NoError(t, err)
+	require.NotEqual(t, nano1, imageversion.New(info2).Nano(), "前提：纳秒视图确实变化")
+
+	key3, err := VariantKey(src, spec, EncoderMagick)
+	require.NoError(t, err)
+	assert.NotEqual(t, key1, key3, "纳秒视图变化必须改变 key")
 }
 
 // Acquire 把请求 ctx 直接交给队列作为登记生命周期：ctx 结束即撤回需求，

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"main/internal/shared"
+	"main/internal/shared/imageversion"
 	"main/internal/shared/transcode"
 	"os"
 	"path/filepath"
@@ -55,15 +56,16 @@ func VariantKey(absPath string, spec transcode.Spec, encoder string) (string, er
 	if err != nil {
 		return "", err
 	}
-	timestamp := fmt.Sprintf("%d", info.ModTime().UnixNano())
-	size := fmt.Sprintf("%d", info.Size())
+	// 图片版本只由 shared/imageversion 定义；变体 key 取其中的纳秒级+大小视图。
+	// 与签名的秒级视图精度不同是 ADR 0004 接受的已知权衡，不在此处各自取字段
+	version := imageversion.New(info).Nano()
 	wStr := ""
 	if spec.Width() > 0 {
 		wStr = fmt.Sprintf("%d", spec.Width())
 	}
 
 	hash := sha256.New()
-	fmt.Fprintf(hash, "%s|%s|%s|%s|%s|%s", filepath.Base(absPath), timestamp, size, wStr, spec.Format().String(), encoder)
+	fmt.Fprintf(hash, "%s|%d|%d|%s|%s|%s", filepath.Base(absPath), version.ModNano, version.Size, wStr, spec.Format().String(), encoder)
 	return base64.URLEncoding.EncodeToString(hash.Sum(nil)), nil
 }
 
