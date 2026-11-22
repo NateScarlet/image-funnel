@@ -13,6 +13,7 @@ import (
 	"main/internal/domain/device"
 	"main/internal/domain/directory"
 	domimage "main/internal/domain/image"
+	domnote "main/internal/domain/note"
 	"main/internal/domain/relpath"
 	"main/internal/pubsub"
 	"main/internal/scalar"
@@ -117,6 +118,29 @@ func (m *mockFileChangedSub) Subscribe(ctx context.Context) iter.Seq2[*directory
 
 func (m *mockFileChangedSub) Publish(ctx context.Context, ev *directory.FileChangedEvent, opts ...pubsub.PublishOption) error {
 	return nil
+}
+
+// recordingSavedEvents 记录笔记保存完成事件的替身，供触发路径测试观测发布时机
+type recordingSavedEvents struct {
+	mu   sync.Mutex
+	rels []relpath.Path
+}
+
+func (r *recordingSavedEvents) Saved(_ context.Context, _ relpath.Path)      {}
+func (r *recordingSavedEvents) Processing(_ context.Context, _ relpath.Path) {}
+func (r *recordingSavedEvents) Finalized(_ context.Context, rel relpath.Path) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.rels = append(r.rels, rel)
+}
+func (r *recordingSavedEvents) Subscribe(_ context.Context) iter.Seq2[*domnote.SavedEvent, error] {
+	return func(func(*domnote.SavedEvent, error) bool) {}
+}
+
+func (r *recordingSavedEvents) finalized() []relpath.Path {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]relpath.Path(nil), r.rels...)
 }
 
 // mockImageRepository 模拟图片仓库
@@ -242,6 +266,7 @@ type testHooks struct {
 	dirRepo     *mockDirectoryRepository
 	notifier    *mockNotificationSender
 	metadataSub *mockMetadataUpdatedSub
+	savedEvents *recordingSavedEvents
 	seams       seams
 	runner      *Runner
 }
@@ -272,6 +297,7 @@ func newTestHooks(t *testing.T, opts testHooksOptions) *testHooks {
 	}
 
 	metadataSub := &mockMetadataUpdatedSub{}
+	savedEvents := &recordingSavedEvents{}
 
 	graphqlURL := opts.GraphQLURL
 	if graphqlURL == "" {
@@ -298,6 +324,7 @@ func newTestHooks(t *testing.T, opts testHooksOptions) *testHooks {
 		ImageRepo:          &mockImageRepository{images: images},
 		DirRepo:            dirRepo,
 		NotificationSender: notifier,
+		SavedEvents:        savedEvents,
 	}
 
 	sm := defaultSeams(deps)
@@ -320,6 +347,7 @@ func newTestHooks(t *testing.T, opts testHooksOptions) *testHooks {
 		dirRepo:     dirRepo,
 		notifier:    notifier,
 		metadataSub: metadataSub,
+		savedEvents: savedEvents,
 		seams:       sm,
 		runner:      runner,
 	}

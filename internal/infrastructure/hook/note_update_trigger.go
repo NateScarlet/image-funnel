@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"main/internal/domain/directory"
+	domnote "main/internal/domain/note"
 	"main/internal/shared"
 	"main/internal/util"
 
@@ -18,14 +19,15 @@ import (
 // noteUpdateTrigger 笔记文件变更触发路径（post_update_note）：
 // 先让指令改写器处理斜杠指令，再触发声明了「无指令」的笔记钩子。
 type noteUpdateTrigger struct {
-	bgCtx   context.Context
-	rootDir string
-	config  configSource
-	exec    *hookExecutor
-	rewrite *noteRewriter
-	guard   *writeGuard
-	notes   *noteContext
-	logger  *zap.Logger
+	bgCtx       context.Context
+	rootDir     string
+	config      configSource
+	exec        *hookExecutor
+	rewrite     *noteRewriter
+	guard       *writeGuard
+	notes       *noteContext
+	savedEvents domnote.SavedEvents
+	logger      *zap.Logger
 }
 
 func newNoteUpdateTrigger(
@@ -36,17 +38,19 @@ func newNoteUpdateTrigger(
 	rewrite *noteRewriter,
 	guard *writeGuard,
 	notes *noteContext,
+	saved domnote.SavedEvents,
 	logger *zap.Logger,
 ) *noteUpdateTrigger {
 	return &noteUpdateTrigger{
-		bgCtx:   bgCtx,
-		rootDir: rootDir,
-		config:  config,
-		exec:    exec,
-		rewrite: rewrite,
-		guard:   guard,
-		notes:   notes,
-		logger:  logger,
+		bgCtx:       bgCtx,
+		rootDir:     rootDir,
+		config:      config,
+		exec:        exec,
+		rewrite:     rewrite,
+		guard:       guard,
+		notes:       notes,
+		savedEvents: saved,
+		logger:      logger,
 	}
 }
 
@@ -73,6 +77,9 @@ func (t *noteUpdateTrigger) HandleFileChanged(event *directory.FileChangedEvent)
 		t.logger.Debug("ignoring change event as it was triggered by our own write", zap.String("path", event.RelPath.String()))
 		return nil
 	}
+
+	// 钩子链路已接手：暂停应用保存登记短兜底计时，慢脚本期间不得发布中间内容
+	t.savedEvents.Processing(t.bgCtx, event.RelPath)
 
 	dir, err := t.notes.DirOfRelPath(t.bgCtx, event.RelPath.Dir())
 	if err != nil {
@@ -108,6 +115,8 @@ func (t *noteUpdateTrigger) HandleFileChanged(event *directory.FileChangedEvent)
 	slices.SortStableFunc(noDirectiveHooks, sortByOrderAndFilename)
 
 	if len(noDirectiveHooks) == 0 {
+		// 没有任何钩子需要执行：本次写入已全部落位，发布保存完成事件
+		t.savedEvents.Finalized(t.bgCtx, event.RelPath)
 		return nil
 	}
 
@@ -125,5 +134,8 @@ func (t *noteUpdateTrigger) HandleFileChanged(event *directory.FileChangedEvent)
 	if err := errB.Build(); err != nil {
 		return fmt.Errorf("failed to execute non-directive hooks: %w", err)
 	}
+
+	// 指令改写与钩子执行都已完成，此时磁盘上是最终内容，发布保存完成事件
+	t.savedEvents.Finalized(t.bgCtx, event.RelPath)
 	return nil
 }

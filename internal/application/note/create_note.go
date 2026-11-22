@@ -39,5 +39,6 @@ func (h *Handler) CreateNote(ctx context.Context, directoryID scalar.ID, name st
 	if err != nil {
 		return nil, err
 	}
+	h.savedEvents.Saved(ctx, n.RelPath())
 	return h.dtoFactory.New(n), nil
 }

@@ -162,6 +162,9 @@ func main() {
 
 	sessionTopic, _ := pubsub.NewInMemoryTopic[scalar.ID](pubsub.InMemoryTopicWithCapacity(4096))
 	fileChangedTopic, _ := pubsub.NewInMemoryTopic[*domdirectory.FileChangedEvent](pubsub.InMemoryTopicWithCapacity(65536))
+	// 笔记保存完成事件在服务端全部处理（含钩子回写）结束后发布，供 noteSaved 订阅消费
+	noteSavedTopic, _ := pubsub.NewInMemoryTopic[*note.SavedEvent](pubsub.InMemoryTopicWithCapacity(4096))
+	savedEvents := appnote.NewSavedEvents(noteSavedTopic, appnote.DefaultSavedEventTimeout, logger)
 	prCreatedTopic, _ := pubsub.NewInMemoryTopic[*pairing.Request](pubsub.InMemoryTopicWithCapacity(1024))
 	prResolvedTopic, _ := pubsub.NewInMemoryTopic[*pairing.RequestResolvedEvent](pubsub.InMemoryTopicWithCapacity(1024))
 	deviceSavedTopic, _ := pubsub.NewInMemoryTopic[*ddevice.Device]()
@@ -226,6 +229,7 @@ func main() {
 		ImageRepo:          imageRepo,
 		DirRepo:            dirRepo,
 		NotificationSender: notifHandler,
+		SavedEvents:        savedEvents,
 	})
 	defer hookRunner.Close()
 
@@ -321,7 +325,7 @@ func main() {
 	noteDTOFactory := appnote.NewDTOFactory(cfg.AbsRootDir)
 	noteFilterBuilder := note.NewFilterBuilder()
 	noteRepository := localfs.NewNoteRepository(cfg.AbsRootDir)
-	noteHandler := appnote.NewHandler(logger, noteRepository, note.NewService(noteRepository, note.NewFactory(cfg.AbsRootDir), cfg.AbsRootDir), dirSvc, fileChangedTopic, noteDTOFactory, noteFilterBuilder)
+	noteHandler := appnote.NewHandler(logger, noteRepository, note.NewService(noteRepository, note.NewFactory(cfg.AbsRootDir), cfg.AbsRootDir), dirSvc, fileChangedTopic, noteDTOFactory, noteFilterBuilder, savedEvents)
 	clipboard := clipboard.NewClipboard()
 	imageHandler := appimage.NewHandler(imageService, fileChangedTopic, imageRepo, imgMover, imgTrasher, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory, clipboard, hookRunner)
 

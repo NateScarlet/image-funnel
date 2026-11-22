@@ -27,5 +27,15 @@ func (h *Handler) UpdateNote(ctx context.Context, id scalar.ID, content string) 
 		}
 	}()
 
-	return h.service.Save(ctx, id, content)
+	if err := h.service.Save(ctx, id, content); err != nil {
+		return err
+	}
+
+	// 写入完成后登记保存完成事件，由钩子链路终结后统一发布
+	n, err := h.service.Read(ctx, id)
+	if err != nil {
+		return err
+	}
+	h.savedEvents.Saved(ctx, n.RelPath())
+	return nil
 }

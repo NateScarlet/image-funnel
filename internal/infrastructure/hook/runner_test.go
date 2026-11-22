@@ -735,6 +735,7 @@ func TestNewRunner_MissingDependencyPanics(t *testing.T) {
 		ImageRepo:          &mockImageRepository{},
 		DirRepo:            &mockDirectoryRepository{},
 		NotificationSender: &mockNotificationSender{},
+		SavedEvents:        &recordingSavedEvents{},
 	}
 
 	missing := map[string]func(*Deps){
@@ -749,6 +750,7 @@ func TestNewRunner_MissingDependencyPanics(t *testing.T) {
 		"ImageRepo":          func(d *Deps) { d.ImageRepo = nil },
 		"DirRepo":            func(d *Deps) { d.DirRepo = nil },
 		"NotificationSender": func(d *Deps) { d.NotificationSender = nil },
+		"SavedEvents":        func(d *Deps) { d.SavedEvents = nil },
 	}
 
 	for name, drop := range missing {

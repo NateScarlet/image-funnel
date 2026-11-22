@@ -9,6 +9,7 @@ import (
 	"main/internal/domain/directory"
 	domhook "main/internal/domain/hook"
 	"main/internal/domain/image"
+	domnote "main/internal/domain/note"
 	"main/internal/domain/relpath"
 	"main/internal/pubsub"
 	"main/internal/scalar"
@@ -36,6 +37,8 @@ type Deps struct {
 	ImageRepo          image.Repository
 	DirRepo            directory.Repository
 	NotificationSender shared.NotificationSender
+	// SavedEvents 笔记保存完成事件端口：钩子链路全部写入完成后据此终结并发布
+	SavedEvents domnote.SavedEvents
 }
 
 // seams 触发路径的可替换实现。生产环境由 defaultSeams 构建默认实现，
@@ -125,7 +128,7 @@ func newRunner(deps Deps, sm seams) *Runner {
 		exec:            exec,
 		rewrite:         rewrite,
 		metadataTrigger: newImageMetadataTrigger(bgCtx, sm.Config, exec, notes, sm.DebounceDuration, deps.Logger),
-		noteUpdate:      newNoteUpdateTrigger(bgCtx, deps.RootDir, sm.Config, exec, rewrite, guard, notes, deps.Logger),
+		noteUpdate:      newNoteUpdateTrigger(bgCtx, deps.RootDir, sm.Config, exec, rewrite, guard, notes, deps.SavedEvents, deps.Logger),
 		sessionCommit:   newSessionCommitTrigger(bgCtx, deps.RootDir, sm.Config, exec, rewrite, notes, deps.Logger),
 		imageDispatch:   newImageDispatchTrigger(sm.Config, exec, notes),
 		noteDispatch:    newNoteDispatchTrigger(deps.RootDir, sm.Config, exec, rewrite, notes),
@@ -160,6 +163,7 @@ func validateDeps(deps Deps) {
 		{"ImageRepo", deps.ImageRepo != nil},
 		{"DirRepo", deps.DirRepo != nil},
 		{"NotificationSender", deps.NotificationSender != nil},
+		{"SavedEvents", deps.SavedEvents != nil},
 	}
 	for _, dep := range required {
 		if !dep.ok {

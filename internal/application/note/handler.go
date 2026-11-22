@@ -13,6 +13,7 @@ type Handler struct {
 	service        *note.Service
 	dirSvc         *directory.Service
 	fileChangedSub pubsub.Topic[*directory.FileChangedEvent]
+	savedEvents    note.SavedEvents
 	dtoFactory     *DTOFactory
 	filterBuilder  *note.FilterBuilder
 	logger         *zap.Logger
@@ -26,6 +27,7 @@ func NewHandler(
 	fileChangedSub pubsub.Topic[*directory.FileChangedEvent],
 	dtoFactory *DTOFactory,
 	filterBuilder *note.FilterBuilder,
+	savedEvents note.SavedEvents,
 ) *Handler {
 	return &Handler{
 		logger:         logger,
@@ -33,6 +35,7 @@ func NewHandler(
 		service:        service,
 		dirSvc:         dirSvc,
 		fileChangedSub: fileChangedSub,
+		savedEvents:    savedEvents,
 		dtoFactory:     dtoFactory,
 		filterBuilder:  filterBuilder,
 	}
