@@ -7,6 +7,7 @@ import shutil
 import tempfile
 import sqlite3
 from contextlib import contextmanager
+from dataclasses import replace
 from typing import Dict, Any, Generator, Optional, List, Set, Tuple, cast
 from unittest.mock import ANY, patch, MagicMock
 
@@ -23,8 +24,6 @@ logging.disable(logging.CRITICAL)
 from .autocomplete import (
     AutocompleteContext,
     AutocompleteSuggestion,
-    BRANCH_ACTION,
-    NO_ACTION,
     WorkflowPromptProvider,
     DanbooruProvider,
     BranchTagProvider,
@@ -36,16 +35,23 @@ from .autocomplete import (
     ModelFormatProvider,
     AutocompleteRequest,
     AutocompleteServices,
+    CompletionPositionQuery,
     autocomplete,
     build_providers,
     build_request_from_params,
-    classify_action,
+    compute_position_query,
     collect_options,
     quote_if_needed,
     NullSuggestionTextFormatter,
     PromptTarget,
     _load_workflow_data,
     _parse_args_for_autocomplete,
+)
+from .completion_position import (
+    BRANCH_ACTION,
+    NO_ACTION,
+    CompletionPosition,
+    compute_completion_position,
 )
 from .__main__ import get_parser
 from .cancellable_http import HttpCanceledError, HttpError
@@ -109,10 +115,38 @@ def _request(
     )
 
 
+def _position_for_context(
+    cwords: List[str],
+    *,
+    target_command: str = "remix",
+    query: str = "",
+    prev_word: str = "",
+    parsed_args: Optional[argparse.Namespace] = None,
+    parser: Optional[argparse.ArgumentParser] = None,
+) -> CompletionPosition:
+    """按测试给定的位置信号调用唯一 seam，构造上下文时复用。"""
+    active_parser = parser or get_parser()
+    return compute_completion_position(
+        target_command=target_command,
+        query=query,
+        prev_word=prev_word,
+        cleaned_cwords=[
+            w for w in cwords if not (w.startswith("<") and w.endswith(">"))
+        ],
+        option_with_args=collect_options(active_parser, cwords)[0],
+        parsed_args=parsed_args,
+    )
+
+
+def _position_query(request: AutocompleteRequest) -> CompletionPositionQuery:
+    """按请求推导位置事实与解析结果，模拟入口的单次计算。"""
+    return compute_position_query(request, get_parser())
+
+
 def _make_context_with(**kwargs: Any) -> AutocompleteContext:
-    """按当前已输入的词推导编辑动作来构造补全上下文（与生产路径同一判定）。"""
+    """按当前已输入的词推导位置事实来构造补全上下文（与生产路径同一 seam）。"""
     cwords = cast(List[str], kwargs.get("cwords") or [])
-    parser = get_parser()
+    parsed_args = cast(Optional[argparse.Namespace], kwargs.get("parsed_args"))
     defaults: Dict[str, Any] = dict(
         target_command="remix",
         query="",
@@ -121,16 +155,18 @@ def _make_context_with(**kwargs: Any) -> AutocompleteContext:
         image_paths=[],
         root_dir="root",
         directory_rel_path="dir",
-        parsed_args=None,
+        parsed_args=parsed_args,
         seen_prompts={},
         workflow=None,
         prompt_meta=None,
-        parser=parser,
         # 用例默认令牌：仅满足调用期签名；断言令牌透传的用例显式传入自己的令牌
         cancel_token=CancelToken(),
-        action=classify_action(
-            [w for w in cwords if not (w.startswith("<") and w.endswith(">"))],
-            collect_options(parser, cwords)[0],
+        position=_position_for_context(
+            cwords,
+            target_command=cast(str, kwargs.get("target_command", "remix")),
+            query=cast(str, kwargs.get("query", "")),
+            prev_word=cast(str, kwargs.get("prev_word", "")),
+            parsed_args=parsed_args,
         ),
     )
     defaults.update(kwargs)
@@ -1061,7 +1097,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             mock_provider, self._make_history(), NullSuggestionTextFormatter()
         )
 
-        self.assertEqual(context.action, BRANCH_ACTION)
+        self.assertEqual(context.position.action, BRANCH_ACTION)
         self.assertTrue(provider.can_provide(context))
         suggestions = list(provider.provide(context))
 
@@ -1190,7 +1226,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             MagicMock(), self._make_history(), NullSuggestionTextFormatter()
         )
 
-        self.assertEqual(context.action, BRANCH_ACTION)
+        self.assertEqual(context.position.action, BRANCH_ACTION)
         self.assertFalse(provider.can_provide(context))
 
     # ---- 同指令 `--add` 标签用于 `--branch` 值补全 ----
@@ -1359,7 +1395,6 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             DanbooruTag("long dress", "长裙", "Long dress.", "General"),
         ]
         services = AutocompleteServices(
-            parser=get_parser(),
             providers=[
                 BranchTagProvider(),
                 DanbooruProvider(
@@ -1373,7 +1408,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             prev_word="--branch",
         )
 
-        suggestions = list(autocomplete(request, services))
+        suggestions = list(autocomplete(request, services, _position_query(request)))
 
         self.assertEqual([s.text for s in suggestions], ["long_hair", "long_dress"])
         self.assertEqual(suggestions[0].type, "branch")
@@ -1385,11 +1420,13 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             ["/remix", "--add", "long_hair", "--branch"], prev_word="--branch"
         )
         with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
-            with build_providers(request, get_parser(), DanbooruEnv()) as providers:
-                services = AutocompleteServices(
-                    parser=get_parser(), providers=providers
+            with build_providers(
+                request, DanbooruEnv(), _position_query(request)
+            ) as providers:
+                services = AutocompleteServices(providers=providers)
+                suggestions = list(
+                    autocomplete(request, services, _position_query(request))
                 )
-                suggestions = list(autocomplete(request, services))
 
         self.assertEqual([s.text for s in suggestions], ["long_hair"])
 
@@ -1802,6 +1839,13 @@ class TestComfyUIAutocomplete(unittest.TestCase):
     def test_target_option_providers_omit_add_flag_when_already_present(self):
         """已完成词里已有 `--add` 时只给目标选项本身：判定扫词列表，不看最后动作。"""
         cwords = ["/remix", "--add", "blue", "--remove", "x"]
+        # 人工构造「最后动作是 remove，但当前仍在目标空位」的历史夹具：
+        # 位置事实不可变，故用 replace 同步改写由 action 派生的空位判定。
+        position = replace(
+            _position_for_context(cwords, prev_word="/remix"),
+            action=NO_ACTION,
+            in_target_option_position=True,
+        )
         context = self._make_context(
             target_command="remix",
             query="",
@@ -1810,7 +1854,7 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             parsed_args=None,
             workflow=self._get_mock_region_workflow(),
             prompt_meta=self._get_mock_region_prompt_meta(),
-            action=NO_ACTION,
+            position=position,
         )
         self.assertEqual(
             [s.text for s in RegionOptionProvider().provide(context)],
@@ -1826,7 +1870,6 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         mock_danbooru = MagicMock()
         history = self._make_history(all_added=[("history_tag", "2026-08-07T10:00:00")])
         services = AutocompleteServices(
-            parser=get_parser(),
             providers=[
                 RegionOptionProvider(),
                 DanbooruProvider(mock_danbooru, history, NullSuggestionTextFormatter()),
@@ -1847,7 +1890,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 directory_rel_path="mock_rel",
                 cancel_token=CancelToken(),
             )
-            suggestions = list(autocomplete(request, services))
+            suggestions = list(
+                autocomplete(request, services, _position_query(request))
+            )
 
         self.assertEqual(
             [s.text for s in suggestions],
@@ -1861,7 +1906,6 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         """`/remix ` 空位在没有区域标记时为空：该位置不产出其他类型的建议。"""
         mock_danbooru = MagicMock()
         services = AutocompleteServices(
-            parser=get_parser(),
             providers=[
                 RegionOptionProvider(),
                 DanbooruProvider(
@@ -1882,7 +1926,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 directory_rel_path="mock_rel",
                 cancel_token=CancelToken(),
             )
-            suggestions = list(autocomplete(request, services))
+            suggestions = list(
+                autocomplete(request, services, _position_query(request))
+            )
 
         self.assertEqual(suggestions, [])
         mock_danbooru.related.assert_not_called()
@@ -1890,7 +1936,6 @@ class TestComfyUIAutocomplete(unittest.TestCase):
     def test_autocomplete_empty_input_suggests_regions_and_nodes_together(self) -> None:
         """`/remix ` 空位：区域与节点选项同批产出，互不遮蔽。"""
         services = AutocompleteServices(
-            parser=get_parser(),
             providers=[
                 RegionOptionProvider(),
                 NodeOptionProvider(),
@@ -1916,7 +1961,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 directory_rel_path="mock_rel",
                 cancel_token=CancelToken(),
             )
-            suggestions = list(autocomplete(request, services))
+            suggestions = list(
+                autocomplete(request, services, _position_query(request))
+            )
 
         self.assertEqual(
             [s.text for s in suggestions],
@@ -1934,7 +1981,6 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             DanbooruTag("cute", "可爱", "Cute character.", "General")
         ]
         services = AutocompleteServices(
-            parser=get_parser(),
             providers=[
                 RegionOptionProvider(),
                 NodeOptionProvider(),
@@ -1961,7 +2007,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 directory_rel_path="mock_rel",
                 cancel_token=CancelToken(),
             )
-            suggestions = list(autocomplete(request, services))
+            suggestions = list(
+                autocomplete(request, services, _position_query(request))
+            )
 
         self.assertEqual([s.text for s in suggestions], ["cute"])
         mock_danbooru.related.assert_called_once()
@@ -2020,7 +2068,6 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 data_dir, False, semantic=NullSemanticTagSearcher()
             )
             services = AutocompleteServices(
-                parser=get_parser(),
                 providers=[
                     RegionOptionProvider(),
                     DanbooruProvider(
@@ -2066,7 +2113,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                             directory_rel_path="mock_rel",
                             cancel_token=CancelToken(),
                         )
-                        suggestions = list(autocomplete(request, services))
+                        suggestions = list(
+                            autocomplete(request, services, _position_query(request))
+                        )
 
                     texts = [s.text for s in suggestions]
                     self.assertIn("floating_hair", texts)
@@ -2081,7 +2130,6 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         with tempfile.TemporaryDirectory() as data_dir:
             self._write_related_data_dir(data_dir)
             services = AutocompleteServices(
-                parser=get_parser(),
                 providers=[
                     RegionOptionProvider(),
                     DanbooruProvider(
@@ -2103,7 +2151,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 directory_rel_path="mock_rel",
                 cancel_token=CancelToken(),
             )
-            suggestions = list(autocomplete(request, services))
+            suggestions = list(
+                autocomplete(request, services, _position_query(request))
+            )
 
         self.assertIn("floating_hair", [s.text for s in suggestions])
 
@@ -2114,7 +2164,6 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             DanbooruTag("cute", "可爱", "Cute character.", "General")
         ]
         services = AutocompleteServices(
-            parser=get_parser(),
             providers=[
                 RegionOptionProvider(),
                 DanbooruProvider(
@@ -2137,7 +2186,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 directory_rel_path="mock_rel",
                 cancel_token=CancelToken(),
             )
-            suggestions = list(autocomplete(request, services))
+            suggestions = list(
+                autocomplete(request, services, _position_query(request))
+            )
 
         self.assertEqual([s.text for s in suggestions], ["cute"])
         mock_danbooru.related.assert_called_once()
@@ -2199,7 +2250,6 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         mock_danbooru = MagicMock()
         history = self._make_history(all_added=[("history_tag", "2026-08-07T10:00:00")])
         services = AutocompleteServices(
-            parser=get_parser(),
             providers=[
                 RegionOptionProvider(),
                 DanbooruProvider(mock_danbooru, history, NullSuggestionTextFormatter()),
@@ -2218,7 +2268,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 directory_rel_path="mock_rel",
                 cancel_token=CancelToken(),
             )
-            suggestions = list(autocomplete(request, services))
+            suggestions = list(
+                autocomplete(request, services, _position_query(request))
+            )
 
         texts = [s.text for s in suggestions]
         self.assertEqual(texts, ["history_tag"])
@@ -2230,7 +2282,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         """真实 provider 链中目标选项提供者必须注册在 Danbooru 提供者之前。"""
         with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
             with build_providers(
-                _request(), get_parser(), DanbooruEnv(search_url="http://localhost")
+                _request(),
+                DanbooruEnv(search_url="http://localhost"),
+                _position_query(_request()),
             ) as providers:
                 names = [type(p).__name__ for p in providers]
         self.assertLess(
@@ -2263,10 +2317,10 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
                 with build_providers(
                     _request(),
-                    get_parser(),
                     DanbooruEnv(
                         search_url="http://should-be-ignored", data_dir=data_dir
                     ),
+                    _position_query(_request()),
                 ) as providers:
                     danbooru = next(
                         p for p in providers if type(p).__name__ == "DanbooruProvider"
@@ -2282,8 +2336,8 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 with self.assertRaises(FileNotFoundError) as ctx:
                     with build_providers(
                         _request(),
-                        get_parser(),
                         DanbooruEnv(search_url="http://localhost", data_dir=data_dir),
+                        _position_query(_request()),
                     ):
                         pass
                 self.assertIn("compile_danbooru_data.py", str(ctx.exception))
@@ -2320,11 +2374,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
                 with build_providers(
                     _request(),
-                    get_parser(),
                     DanbooruEnv(
                         data_dir=data_dir,
                         embedding_provider_url="http://127.0.0.1:1#model=stub",
                     ),
+                    _position_query(_request()),
                 ) as providers:
                     danbooru = next(
                         p for p in providers if type(p).__name__ == "DanbooruProvider"
@@ -2347,11 +2401,11 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
                 with build_providers(
                     _request(),
-                    get_parser(),
                     DanbooruEnv(
                         data_dir=data_dir,
                         embedding_provider_url="http://127.0.0.1:1#model=stub",
                     ),
+                    _position_query(_request()),
                 ) as providers:
                     danbooru = next(
                         p for p in providers if type(p).__name__ == "DanbooruProvider"
@@ -2379,7 +2433,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
             self._write_single_tag_fixture(data_dir)
             with _data_dir_env(), patch("comfyui.autocomplete.SQLiteContext"):
                 with build_providers(
-                    _request(), get_parser(), DanbooruEnv(data_dir=data_dir)
+                    _request(),
+                    DanbooruEnv(data_dir=data_dir),
+                    _position_query(_request()),
                 ) as providers:
                     danbooru = next(
                         p for p in providers if type(p).__name__ == "DanbooruProvider"
@@ -2392,7 +2448,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
     def test_build_providers_without_url_or_data_dir_skips_danbooru(self) -> None:
         """URL 与数据目录均为空时不注册 DanbooruProvider。"""
         with patch("comfyui.autocomplete.SQLiteContext"):
-            with build_providers(_request(), get_parser(), DanbooruEnv()) as providers:
+            with build_providers(
+                _request(), DanbooruEnv(), _position_query(_request())
+            ) as providers:
                 names = [type(p).__name__ for p in providers]
         self.assertNotIn("DanbooruProvider", names)
 
@@ -2404,7 +2462,6 @@ class TestComfyUIAutocomplete(unittest.TestCase):
         ]
         history = self._make_history()
         services = AutocompleteServices(
-            parser=get_parser(),
             providers=[
                 RegionOptionProvider(),
                 DanbooruProvider(mock_danbooru, history, NullSuggestionTextFormatter()),
@@ -2437,7 +2494,9 @@ class TestComfyUIAutocomplete(unittest.TestCase):
                 directory_rel_path="mock_rel",
                 cancel_token=token,
             )
-            suggestions = list(autocomplete(request, services))
+            suggestions = list(
+                autocomplete(request, services, _position_query(request))
+            )
 
         mock_danbooru.related.assert_called_once_with(
             ["1girl"],
@@ -2904,11 +2963,13 @@ class TestModelFormatAutocomplete(unittest.TestCase):
         )
         with build_providers(
             _request(["/set-model-format"], "set-model-format"),
-            get_parser(),
             DanbooruEnv(),
+            _position_query(_request(["/set-model-format"], "set-model-format")),
         ) as providers:
-            services = AutocompleteServices(parser=get_parser(), providers=providers)
-            suggestions = list(autocomplete(request, services))
+            services = AutocompleteServices(providers=providers)
+            suggestions = list(
+                autocomplete(request, services, _position_query(request))
+            )
         texts = [s.text for s in suggestions]
         self.assertIn("animaPencilXL_v10.safetensors", texts)
 
@@ -3420,10 +3481,9 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
             cancel_token=CancelToken(),
         )
         services = AutocompleteServices(
-            parser=get_parser(),
             providers=[self._make_provider(mock_provider, self._make_history())],
         )
-        return list(autocomplete(request, services))
+        return list(autocomplete(request, services, _position_query(request)))
 
     def test_default_region_resolves_target_model_format(self) -> None:
         """未指定 --region/--node 时按默认 positive 区域解析目标模型格式。"""
@@ -3556,12 +3616,14 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
         """格式化依赖仅注入 /add；其余指令显式注入空实现。"""
         with patch("comfyui.autocomplete.SQLiteContext"):
             with build_providers(
-                _request(), get_parser(), DanbooruEnv(search_url="http://localhost")
+                _request(),
+                DanbooruEnv(search_url="http://localhost"),
+                _position_query(_request()),
             ) as add_providers:
                 with build_providers(
                     _request(cwords=["/remix", "--remove"]),
-                    get_parser(),
                     DanbooruEnv(search_url="http://localhost"),
+                    _position_query(_request(cwords=["/remix", "--remove"])),
                 ) as remove_providers:
                     add_formatter = cast(
                         Any,
@@ -3587,8 +3649,8 @@ class TestAddSuggestionModelFormat(unittest.TestCase):
                 with self.assertRaises(MissingDataDirError):
                     with build_providers(
                         _request(),
-                        get_parser(),
                         DanbooruEnv(search_url="http://localhost"),
+                        _position_query(_request()),
                     ):
                         pass
 

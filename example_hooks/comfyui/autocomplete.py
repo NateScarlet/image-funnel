@@ -68,27 +68,19 @@ from .model_format import (
     format_prompt_text,
 )
 from .weight_parser import looks_like_weight
+from .completion_position import (
+    ADD_ACTION,
+    ASPECT_ACTION,
+    BRANCH_ACTION,
+    CFG_ACTION,
+    LORA_ACTION,
+    REMOVE_ACTION,
+    CompletionPosition,
+    action_values,
+    compute_completion_position,
+)
 
 _LOGGER = logging.getLogger(__name__)
-
-# 补全上下文：当前输入位置所处的 /remix 编辑动作
-NO_ACTION = ""
-ADD_ACTION = "add"
-REMOVE_ACTION = "remove"
-LORA_ACTION = "lora"
-CFG_ACTION = "cfg"
-ASPECT_ACTION = "aspect"
-BRANCH_ACTION = "branch"
-
-# 每个旗标把补全上下文切到哪个动作；`--cfg` / `--aspect` 只取一个值，其余多值
-_ACTION_FLAGS: Dict[str, str] = {
-    "--add": ADD_ACTION,
-    "--remove": REMOVE_ACTION,
-    "--lora": LORA_ACTION,
-    "--cfg": CFG_ACTION,
-    "--aspect": ASPECT_ACTION,
-    "--branch": BRANCH_ACTION,
-}
 
 # 解析「指令还写了一半」时用来补位的占位值：它只让 argparse 通过校验，
 # 补全逻辑只读 --region / --node / --neg 等修饰选项，不会把占位值当成真实输入
@@ -114,66 +106,6 @@ def collect_options(
             target = without_args if action.nargs == 0 else with_args
             target.update(action.option_strings)
     return with_args, without_args
-
-
-def classify_action(cwords: List[str], option_with_args: Set[str]) -> str:
-    """按当前输入位置所处的旗标判定补全上下文。
-
-    cwords 只含已完成的词（正在输入的词在 query 中），因此扫描到最后一个编辑旗标
-    即可定位当前所在的动作。只有编辑旗标（--add / --remove 等）会切换动作；其余
-    选项都是当前动作的修饰（取值选项的参数值直接跳过），`--` 结束标记之后同理按
-    位置值看。
-
-    `--add` 全程都是「补 tag」的位置：末尾 token 是不是权重表达式只在提交时才判定，
-    补全不必（也不该）为此换一套候选——权重位置填的是数字或表达式。
-    """
-    action: str = NO_ACTION
-    expect_value = False
-    for word in cwords[1:]:
-        if expect_value:
-            expect_value = False
-            continue
-        if word == "--":
-            continue
-        if word in _ACTION_FLAGS:
-            action = _ACTION_FLAGS[word]
-        elif word in option_with_args:
-            expect_value = True
-    return action
-
-
-def action_values(cwords: List[str], action: str) -> List[List[str]]:
-    """按旗标出现次数分组取出当前动作已键入的位置值（可再按逗号拆分）。
-
-    一次 `--add` 可以带多个值（`--add a b`），执行路径按出现次数分组解析，
-    因此这里保留分组：需要扁平化标签的场景用 `action_tags`，需要区分「权重要不要
-    丢掉」的场景（一次 `--add` 的最后一个 token 可能是权重）自己按组处理。
-    """
-    flag = next((f for f, a in _ACTION_FLAGS.items() if a == action), None)
-    if flag is None:
-        return []
-
-    groups: List[List[str]] = []
-    collecting: Optional[List[str]] = None
-    for word in cwords[1:]:
-        if word.startswith("-"):
-            collecting = [] if word == flag else None
-            if collecting is not None:
-                groups.append(collecting)
-            continue
-        if collecting is None:
-            continue
-        cleaned = word.strip().strip(",").strip('"').strip("'").strip()
-        for part in cleaned.split(","):
-            part_cleaned = part.strip()
-            if part_cleaned:
-                collecting.append(part_cleaned)
-    return groups
-
-
-def action_tags(cwords: List[str], action: str) -> List[str]:
-    """取出当前动作已键入的位置值（可再按逗号拆分），供关联联想作为查询标签。"""
-    return [tag for group in action_values(cwords, action) for tag in group]
 
 
 def quote_if_needed(val: str) -> str:
@@ -415,8 +347,7 @@ class AutocompleteContext:
         prompt_meta: Optional[Dict[str, Any]] = None,
         prompt_target: Optional[PromptTarget] = None,
         prompt_accessor: Optional[NodeAccessor] = None,
-        parser: argparse.ArgumentParser,
-        action: str,
+        position: CompletionPosition,
         cancel_token: CancelToken,
     ):
         self.target_command: str = target_command
@@ -430,32 +361,8 @@ class AutocompleteContext:
         # 本次请求的取消令牌：随上下文下传给 provider，由它们在调用期交给网络层
         self.cancel_token: CancelToken = cancel_token
 
-        # 动态解析选项参数（解析器由入口注入）
-        (
-            self.option_with_args,
-            self.option_without_args,
-        ) = collect_options(parser, self.cwords)
-
-        # /remix 把所有编辑合并成一条指令：补全按当前输入所处的旗标分派到对应动作
-        self.action: str = action
-        self.action_tags: List[str] = action_tags(self.cleaned_cwords, self.action)
-
-        # 当前词是否落在取值型修饰选项（--region / --node）的参数位置。
-        # 编辑旗标（--add / --remove / --lora）的值正是要补全的内容，不在此列，
-        # 否则 `/remix --add blue` 会因为前一个词是取值型选项而完全不给建议。
-        self.editing_modifier_value = False
-        if (
-            self.prev_word in self.option_with_args
-            and self.prev_word not in _ACTION_FLAGS
-        ):
-            try:
-                self.editing_modifier_value = (
-                    "--" not in self.cleaned_cwords
-                    or self.cleaned_cwords.index("--")
-                    > self.cleaned_cwords.index(self.prev_word)
-                )
-            except ValueError:
-                self.editing_modifier_value = True
+        # 位置判定由入口单次计算后注入；上下文与所有 provider 共享同一份事实
+        self.position: CompletionPosition = position
 
         self._parsed_args: Optional[argparse.Namespace] = parsed_args
         self._seen_prompts: Dict[str, str] = seen_prompts or {}
@@ -568,7 +475,7 @@ class NodeProvider(AutocompleteProvider):
         return True
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        return context.prev_word == "--node" and context.editing_modifier_value
+        return context.prev_word == "--node" and context.position.editing_modifier_value
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
         yield from _iter_node_suggestions(context)
@@ -608,8 +515,8 @@ def _iter_node_suggestions(
                     seen_nodes.add(val)
 
     # 确定当前命令支持 of node 类型的过滤逻辑
-    is_cfg = context.action == CFG_ACTION
-    is_aspect = context.action == ASPECT_ACTION
+    is_cfg = context.position.action == CFG_ACTION
+    is_aspect = context.position.action == ASPECT_ACTION
 
     for node_id, node_data in sorted(context.prompt_meta.items(), key=lambda x: x[0]):
         class_type = node_data.get("class_type", "")
@@ -673,7 +580,9 @@ class RegionProvider(AutocompleteProvider):
         return True
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        return context.prev_word == "--region" and context.editing_modifier_value
+        return (
+            context.prev_word == "--region" and context.position.editing_modifier_value
+        )
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
         regions: Iterator[str] = (
@@ -768,7 +677,7 @@ class LoraProvider(AutocompleteProvider):
         return True
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        return context.action == LORA_ACTION and context.prev_word == "--lora"
+        return context.position.action == LORA_ACTION and context.prev_word == "--lora"
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
         loras: Iterator[str] = (
@@ -790,13 +699,13 @@ class WorkflowPromptProvider(AutocompleteProvider):
     """工作流已存在提示词推荐（只有移除动作需要：它按原文精确匹配既有文本）"""
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        if context.action != REMOVE_ACTION:
+        if context.position.action != REMOVE_ACTION:
             return False
 
         is_option_input = (
             context.query.startswith("-") and "--" not in context.cleaned_cwords
         )
-        if is_option_input or context.editing_modifier_value:
+        if is_option_input or context.position.editing_modifier_value:
             return False
 
         return context.parsed_args is not None
@@ -812,70 +721,14 @@ class WorkflowPromptProvider(AutocompleteProvider):
                 )
 
 
-def _has_explicit_target(context: AutocompleteContext) -> bool:
-    """判断命令行是否已显式指定插入目标（--region 或 --node）。"""
-    parsed = context.parsed_args
-    if parsed is not None:
-        return bool(getattr(parsed, "region", None)) or bool(
-            getattr(parsed, "node", None)
-        )
-    # 解析失败时回退扫描已完成词列表中的选项 token
-    return any(w in ("--region", "--node") for w in context.cleaned_cwords[1:])
-
-
-def _has_add_flag(context: AutocompleteContext) -> bool:
-    """扫描光标之前的已完成词，判断命令行里是否已出现过 `--add`。
-
-    不能只看 context.action：classify_action 只返回最后一个编辑旗标，
-    `/remix --add blue --remove x` 的 action 是移除，但用户已经进入了新增动作，
-    目标选项不应再附带 `--add`（需要多个标签时会在同一个 `--add` 后连续写）。
-    `--` 之后写入的是位置值而非旗标，扫描到此为止。
-    """
-    for word in context.cleaned_cwords[1:]:
-        if word == "--":
-            return False
-        if word == "--add":
-            return True
-    return False
-
-
 def _target_option_text(base: str, context: AutocompleteContext) -> str:
     """目标选项的插入文本：尚未添加过标签时顺带进入新增动作。
 
     前端会在建议文本后补空格，因此这里的 `--add` 之后即为标签值位置。
     """
-    if _has_add_flag(context):
+    if context.position.has_add_flag:
         return base
     return f"{base} --add"
-
-
-def _in_target_option_position(context: AutocompleteContext) -> bool:
-    """判断光标是否位于尚未指定目标的 `/remix ` 空位。
-
-    只有空位才允许写 `--region` / `--node`：编辑动作（`--add` 等）之后跟旗标
-    会被 argparse 当成该动作的值而拒绝整条指令。这两个旗标只定义在 remix 上，
-    其他指令的空位不能给出。
-    """
-    if context.target_command != "remix" or context.action != NO_ACTION:
-        return False
-
-    # `--` 是选项结束标记，之后写入的都是位置值而非旗标
-    if "--" in context.cleaned_cwords:
-        return False
-
-    # 正在输入查询词时交给语义搜索补全
-    if context.query.strip():
-        return False
-
-    # 取值型选项的参数位（如 `-j `）只接受值，旗标建议同样会让指令非法
-    if context.editing_modifier_value:
-        return False
-
-    # 目标已确定（--region/--node）后，该位置交给关联联想
-    if _has_explicit_target(context):
-        return False
-
-    return context.workflow_loaded
 
 
 class RegionOptionProvider(AutocompleteProvider):
@@ -883,10 +736,12 @@ class RegionOptionProvider(AutocompleteProvider):
 
     def can_provide(self, context: AutocompleteContext) -> bool:
         # 非独占：节点选项由 NodeOptionProvider 在同一次请求中继续产出
-        if not _in_target_option_position(context):
+        if (
+            not context.position.in_target_option_position
+            or not context.workflow_loaded
+        ):
             return False
 
-        # 位置判定已保证工作流加载
         workflow = context.workflow
         assert workflow is not None
         return len(list(extract_region_names([workflow]))) > 0
@@ -912,11 +767,11 @@ class NodeOptionProvider(AutocompleteProvider):
         return True
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        return _in_target_option_position(context)
+        return context.position.in_target_option_position and context.workflow_loaded
 
     def provide(self, context: AutocompleteContext) -> Iterator[AutocompleteSuggestion]:
         # 未添加过标签时顺带进入新增动作；前端会在建议文本后补空格
-        suffix = "" if _has_add_flag(context) else " --add"
+        suffix = "" if context.position.has_add_flag else " --add"
         yield from _iter_node_suggestions(
             context, text_prefix="--node ", text_suffix=suffix
         )
@@ -1036,7 +891,7 @@ class BranchTagProvider(AutocompleteProvider):
     def can_provide(self, context: AutocompleteContext) -> bool:
         # `--branch` 只有一个值位置：值写完（后跟空格）后不再给候选。它本身是编辑
         # 旗标，因此 `prev_word` 命中时也不会落在 `--region` / `--node` 的取值位置
-        if context.action != BRANCH_ACTION or context.prev_word != "--branch":
+        if context.position.action != BRANCH_ACTION or context.prev_word != "--branch":
             return False
         # 正在输入旗标名本身（如 `--re`）：等它写完再补全
         return not context.query.startswith("-")
@@ -1114,15 +969,15 @@ class DanbooruProvider(AutocompleteProvider):
         self.text_formatter = text_formatter
 
     def can_provide(self, context: AutocompleteContext) -> bool:
-        if context.action == BRANCH_ACTION:
+        if context.position.action == BRANCH_ACTION:
             # `--branch` 只有一个值位置：分支名写完后再给候选会诱导写入非法参数
             if context.prev_word != "--branch":
                 return False
-        elif context.action != ADD_ACTION:
+        elif context.position.action != ADD_ACTION:
             return False
 
         # 正在输入 --region / --node 的值：交给它们各自的 provider
-        if context.editing_modifier_value:
+        if context.position.editing_modifier_value:
             return False
 
         # 正在输入旗标名本身（如 `--re`）：等它写完再补全
@@ -1138,7 +993,7 @@ class DanbooruProvider(AutocompleteProvider):
         模型格式，原样返回。分支名不落到任何提示词节点，固定使用 sdxl 形态，
         因此不依赖当前图片的工作流。
         """
-        if context.action == BRANCH_ACTION:
+        if context.position.action == BRANCH_ACTION:
             return _branch_tag_form(text)
 
         accessor = context.prompt_accessor
@@ -1166,7 +1021,7 @@ class DanbooruProvider(AutocompleteProvider):
         转义符会成为非法路径分隔符，因此分支补全保留标签原样形态。
         """
         escaped = tag
-        if context.action != BRANCH_ACTION:
+        if context.position.action != BRANCH_ACTION:
             escaped = tag.replace("(", r"\(").replace(")", r"\)")
         return self._suggestion_text(context, escaped, prefix)
 
@@ -1174,7 +1029,9 @@ class DanbooruProvider(AutocompleteProvider):
         # `--branch` 的值可以是 `b1,blue` 这样的多标签目录名：已写前缀原样拼回候选
         # 前面，过滤与搜索只看最后一个逗号之后的当前段
         branch = (
-            _branch_value(context.query) if context.action == BRANCH_ACTION else None
+            _branch_value(context.query)
+            if context.position.action == BRANCH_ACTION
+            else None
         )
         branch_prefix = branch.prefix if branch else ""
         search_query = branch.current if branch else context.query
@@ -1190,7 +1047,7 @@ class DanbooruProvider(AutocompleteProvider):
             added: Set[str],
             added_times: dict[str, str],
         ) -> Iterator[AutocompleteSuggestion]:
-            if context.action == BRANCH_ACTION:
+            if context.position.action == BRANCH_ACTION:
                 # 分支名与提示词内容无关：只标记目标目录是否已存在
                 for s in suggestions:
                     _mark_existing_branch_dir(context, s)
@@ -1257,7 +1114,7 @@ class DanbooruProvider(AutocompleteProvider):
                         type="danbooru",
                         style="muted",
                     )
-                    if context.action == BRANCH_ACTION:
+                    if context.position.action == BRANCH_ACTION:
                         _mark_existing_branch_dir(context, suggestion)
                     yield suggestion
                     count += 1
@@ -1339,7 +1196,7 @@ class DanbooruProvider(AutocompleteProvider):
                 )
         else:
             # 当前词未输入，执行关联联想
-            prompt_tags = list(context.action_tags)
+            prompt_tags = list(context.position.action_tags)
             if not prompt_tags and context.workflow_loaded:
                 # 如果前面没有其他提示词，则用目标区域的提示词作为查询 tags！
                 raw_tags: List[str] = []
@@ -1425,9 +1282,8 @@ class AutocompleteRequest:
 
 @dataclass(frozen=True)
 class AutocompleteServices:
-    """自动补全依赖（由最外层入口构建并注入）：解析器与补全 provider 列表。"""
+    """自动补全依赖（由最外层入口构建并注入）：补全 provider 列表。"""
 
-    parser: argparse.ArgumentParser
     providers: List[AutocompleteProvider]
 
 
@@ -1483,11 +1339,12 @@ def build_request_from_params(
     )
 
 
-def action_for(request: AutocompleteRequest, parser: argparse.ArgumentParser) -> str:
-    """按本次请求已输入的词判定所处的编辑动作（解析器由入口注入）。"""
-    cleaned_cwords = _cleaned_cwords(request.cwords)
-    with_args, _ = collect_options(parser, request.cwords)
-    return classify_action(cleaned_cwords, with_args)
+@dataclass(frozen=True)
+class CompletionPositionQuery:
+    """位置事实与解析副产品：入口按请求推导一次，供格式化器与补全上下文共享。"""
+
+    position: CompletionPosition
+    parsed_args: Optional[argparse.Namespace]
 
 
 def _cleaned_cwords(cwords: List[str]) -> List[str]:
@@ -1495,21 +1352,43 @@ def _cleaned_cwords(cwords: List[str]) -> List[str]:
     return [w for w in cwords if not (w.startswith("<") and w.endswith(">"))]
 
 
+def compute_position_query(
+    request: AutocompleteRequest, parser: argparse.ArgumentParser
+) -> CompletionPositionQuery:
+    """把请求信号装配成新 module 的输入并返回位置事实（纯计算，无 I/O）。"""
+    cleaned_cwords = _cleaned_cwords(request.cwords)
+    option_with_args, _ = collect_options(parser, request.cwords)
+    parsed_args = _parse_args_for_autocomplete(
+        parser, request.target_command, cleaned_cwords
+    )
+    return CompletionPositionQuery(
+        position=compute_completion_position(
+            target_command=request.target_command,
+            query=request.query,
+            prev_word=request.prev_word,
+            cleaned_cwords=cleaned_cwords,
+            option_with_args=option_with_args,
+            parsed_args=parsed_args,
+        ),
+        parsed_args=parsed_args,
+    )
+
+
 @contextmanager
 def build_providers(
     request: AutocompleteRequest,
-    parser: argparse.ArgumentParser,
     danbooru: DanbooruEnv,
+    query: CompletionPositionQuery,
 ) -> Generator[List[AutocompleteProvider], None, None]:
     """由入口构建补全 provider 列表，并用 ExitStack 管理底层的 DB 上下文生命周期。
 
     danbooru 由最外层入口通过 danbooru_env 模块解析/构建：本地编译产物目录非空时
     优先启用本地链路（字面匹配不依赖在线服务），否则搜索地址非空时启用在线链路
     （结果经目录级 SQLite 缓存），两者皆空时不注册 Danbooru 提供者。
-    request 与 parser 用于按需构建轻量依赖：仅 /set-model-format 需要加载模型格式
-    配置，从而避免其他指令的补全因缺失 IMAGE_FUNNEL_DATA_DIR 而整体失败；仅新增
-    标签（--add）的 Danbooru 建议需要按模型格式重排建议文本（见
-    build_suggestion_text_formatter）。
+    request 用于按需构建轻量依赖：仅 /set-model-format 需要加载模型格式配置，从而
+    避免其他指令的补全因缺失 IMAGE_FUNNEL_DATA_DIR 而整体失败；仅新增标签（--add）
+    的 Danbooru 建议需要按模型格式重排建议文本（见 build_suggestion_text_formatter），
+    其动作取自入口注入的同一次位置判定结果 query。
     """
     with ExitStack() as stack:
         providers: List[AutocompleteProvider] = []
@@ -1540,7 +1419,7 @@ def build_providers(
                     DanbooruProvider(
                         tag_provider,
                         history,
-                        build_suggestion_text_formatter(action_for(request, parser)),
+                        build_suggestion_text_formatter(query.position.action),
                     )
                 )
         yield providers
@@ -1549,15 +1428,11 @@ def build_providers(
 def autocomplete(
     request: AutocompleteRequest,
     services: AutocompleteServices,
+    query: CompletionPositionQuery,
 ) -> Iterator[AutocompleteSuggestion]:
-    """生成自动完成建议：上下文与依赖全部由调用方（入口）注入，自身不读取任何环境变量。"""
-    action = action_for(request, services.parser)
-
-    parsed_args = _parse_args_for_autocomplete(
-        services.parser,
-        request.target_command,
-        _cleaned_cwords(request.cwords),
-    )
+    """生成自动完成建议：位置事实与依赖全部由调用方（入口）注入，自身不读取任何环境变量。"""
+    action = query.position.action
+    parsed_args = query.parsed_args
 
     seen_prompts, workflow, prompt_meta, target, pair = _load_workflow_data(
         request.image_paths, parsed_args, action
@@ -1577,8 +1452,7 @@ def autocomplete(
         prompt_meta=prompt_meta,
         prompt_target=target,
         prompt_accessor=pair,
-        parser=services.parser,
-        action=action,
+        position=query.position,
         cancel_token=request.cancel_token,
     )
 
@@ -1692,9 +1566,10 @@ class _AutocompleteTask:
         suggestions: List[AutocompleteSuggestion] = []
         failure: Optional[str] = None
         try:
-            with build_providers(self.request, self.parser, self.danbooru) as providers:
-                services = AutocompleteServices(parser=self.parser, providers=providers)
-                suggestions = list(autocomplete(self.request, services))
+            query = compute_position_query(self.request, self.parser)
+            with build_providers(self.request, self.danbooru, query) as providers:
+                services = AutocompleteServices(providers=providers)
+                suggestions = list(autocomplete(self.request, services, query))
         except HttpCanceledError:
             # 取消掐断在途调用不是失败：请求方已不需要该结果，不回报也不记错误
             pass
@@ -1786,9 +1661,10 @@ def main() -> None:
         # 单次模式没有取消通道：显式构造一个永不取消的令牌
         parser = get_parser()
         request = build_request_from_env(target_cmd, CancelToken())
-        with build_providers(request, parser, danbooru_env_from_env()) as providers:
-            services = AutocompleteServices(parser=parser, providers=providers)
-            for s in autocomplete(request, services):
+        query = compute_position_query(request, parser)
+        with build_providers(request, danbooru_env_from_env(), query) as providers:
+            services = AutocompleteServices(providers=providers)
+            for s in autocomplete(request, services, query):
                 print(json.dumps(_suggestion_to_dict(s), ensure_ascii=False))
         sys.exit(0)
     else:

@@ -471,7 +471,7 @@ protocol = "json-rpc"                                    # 启用常驻复用；
 - **进程行为**：维护 `id → 进行中任务` 映射，stdin 关闭时退出。业务日志输出到 **stderr**，不污染协议 stdout。
 
 > [!IMPORTANT]
-> **依赖注入**：常驻脚本的核心补全逻辑**不得自行读取环境变量或构建依赖**（解析器、Danbooru provider、数据库连接等），应由最外层入口（`serve()` / 单次 `main()`）构建并注入；按请求变化的目录上下文（`rootDir`/`directoryRelPath`）随请求参数传递。依赖**初始化失败应直接抛出**（快速失败，进程退出由应用重启），不要捕获降级。参考 `example_hooks/comfyui/autocomplete.py`：`build_request_from_params` 构造请求、`build_providers` 构建 provider、`autocomplete(request, services)` 为纯执行。
+> **依赖注入**：常驻脚本的核心补全逻辑**不得自行读取环境变量或构建依赖**（解析器、Danbooru provider、数据库连接等），应由最外层入口（`serve()` / 单次 `main()`）构建并注入；按请求变化的目录上下文（`rootDir`/`directoryRelPath`）随请求参数传递。依赖**初始化失败应直接抛出**（快速失败，进程退出由应用重启），不要捕获降级。参考 `example_hooks/comfyui/autocomplete.py`：`build_request_from_params` 构造请求、入口用 `compute_position_query` 单次推导位置事实、`build_providers` 构建 provider、`autocomplete(request, services, query)` 为纯执行。
 
 **应用侧兜底（三层）**：发新请求前先对进行中旧请求发 `$/cancelRequest`；按 id 匹配响应、过期响应丢弃；请求级超时未响应则丢弃该请求并重启进程。因此取消是**尽力而为**——脚本即使不实现可取消性，结果正确性也不受影响。
 

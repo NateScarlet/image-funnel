@@ -20,8 +20,10 @@ from .autocomplete import (
     AutocompleteRequest,
     AutocompleteServices,
     AutocompleteSuggestion,
+    CompletionPositionQuery,
     autocomplete,
     build_providers,
+    compute_position_query,
     serve,
 )
 from .__main__ import get_parser
@@ -46,6 +48,11 @@ def _request(
         directory_rel_path=directory_rel_path,
         cancel_token=CancelToken(),
     )
+
+
+def _position_query(request: AutocompleteRequest) -> CompletionPositionQuery:
+    """按请求推导位置事实与解析结果，模拟入口的单次计算。"""
+    return compute_position_query(request, get_parser())
 
 
 def _run_serve(input_lines: List[str]) -> str:
@@ -151,7 +158,7 @@ class TestServe(unittest.TestCase):
 
     def test_serve_cancel_skips_response(self) -> None:
         def slow_autocomplete(
-            request: Any, services: Any
+            request: Any, services: Any, query: CompletionPositionQuery
         ) -> List[AutocompleteSuggestion]:
             time.sleep(0.2)
             return []
@@ -233,13 +240,17 @@ class TestServe(unittest.TestCase):
             directory_rel_path="",
             cancel_token=CancelToken(),
         )
-        with build_providers(request, get_parser(), DanbooruEnv()) as providers:
-            services = AutocompleteServices(parser=get_parser(), providers=providers)
+        with build_providers(
+            request, DanbooruEnv(), _position_query(request)
+        ) as providers:
+            services = AutocompleteServices(providers=providers)
             with patch(
                 "comfyui.autocomplete._load_workflow_data",
                 return_value=({}, {"nodes": []}, fake_prompt_meta, None, None),
             ):
-                suggestions = list(autocomplete(request, services))
+                suggestions = list(
+                    autocomplete(request, services, _position_query(request))
+                )
 
         # 应返回 CLIPTextEncode 节点，过滤 KSampler（不受任何环境变量影响）
         texts = [s.text for s in suggestions]
@@ -256,8 +267,8 @@ class TestServe(unittest.TestCase):
         ), patch("comfyui.autocomplete.SQLiteContext", return_value=fake_ctx):
             with build_providers(
                 _request(root_dir="root", directory_rel_path="dir"),
-                get_parser(),
                 DanbooruEnv(search_url="http://localhost"),
+                _position_query(_request(root_dir="root", directory_rel_path="dir")),
             ) as providers:
                 # 6 个固定 provider + 分支名标签 provider + Danbooru provider
                 self.assertEqual(len(providers), 8)
