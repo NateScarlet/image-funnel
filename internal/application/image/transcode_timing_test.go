@@ -27,41 +27,55 @@ func (slowProcessor) Meta(_ context.Context, _ string) (*shared.ImageMeta, error
 	return &shared.ImageMeta{Width: 1024, Height: 768}, nil
 }
 
-func TestAcquireReportsEncodeTiming(t *testing.T) {
-	c := NewTranscodeCoordinator(&mockCache{files: make(map[string]transcode.File)}, slowProcessor{}, newFakeQueue(), EncoderMagick, nil)
+func TestVariantReportsEncodeTiming(t *testing.T) {
+	cache := &mockCache{files: make(map[string]transcode.File)}
+	queue := newFakeQueue()
+	c := NewTranscodeCoordinator(cache, slowProcessor{}, queue,
+		&stubSourceProbe{width: 2048, contentType: "image/jpeg"}, EncoderMagick, nil)
 	stop := startWorkers(t, c)
 	defer stop()
 
 	src := filepath.Join(t.TempDir(), "a.png")
 	require.NoError(t, os.WriteFile(src, []byte("image"), 0o644))
-	spec, err := transcode.NewSpec(256, transcode.ImageFormatWebP)
-	require.NoError(t, err)
 
-	_, timing, err := c.Acquire(context.Background(), src, spec, transcode.PrioHigh)
+	result, err := c.Variant(context.Background(), VariantInput{
+		AbsPath: src, Width: 256, Format: transcode.ImageFormatWebP,
+		Accept: "image/jpeg, image/webp", Priority: transcode.PrioHigh,
+	})
 	require.NoError(t, err)
-	assert.False(t, timing.CacheHit)
-	assert.GreaterOrEqual(t, timing.EncodeDuration, 5*time.Millisecond,
+	assert.False(t, result.CacheHit)
+	assert.GreaterOrEqual(t, result.EncodeDuration, 5*time.Millisecond,
 		"编码耗时必须来自真实 Process 调用")
 }
 
-func TestCachedVariantReportsCacheHit(t *testing.T) {
-	c := NewTranscodeCoordinator(&mockCache{files: make(map[string]transcode.File)}, slowProcessor{}, newFakeQueue(), EncoderMagick, nil)
+func TestVariantReportsCacheHit(t *testing.T) {
+	cache := &mockCache{files: make(map[string]transcode.File)}
+	queue := newFakeQueue()
+	c := NewTranscodeCoordinator(cache, slowProcessor{}, queue,
+		&stubSourceProbe{width: 2048, contentType: "image/jpeg"}, EncoderMagick, nil)
+	stop := startWorkers(t, c)
+	defer stop()
 
 	src := filepath.Join(t.TempDir(), "a.png")
 	require.NoError(t, os.WriteFile(src, []byte("image"), 0o644))
+	in := VariantInput{
+		AbsPath: src, Width: 256, Format: transcode.ImageFormatWebP,
+		Accept: "image/jpeg, image/webp", Priority: transcode.PrioHigh,
+	}
+
+	// 未命中路径必须给出明确状态，不能只返回 nil 文件
+	miss, err := c.Variant(context.Background(), in)
+	require.NoError(t, err)
+	assert.False(t, miss.CacheHit)
+
+	// 预热缓存后命中
 	spec, err := transcode.NewSpec(256, transcode.ImageFormatWebP)
 	require.NoError(t, err)
-
-	_, timing, err := c.CachedVariant(context.Background(), src, spec)
-	require.NoError(t, err)
-	assert.False(t, timing.CacheHit, "未命中也必须给出明确状态，不能只返回 nil 文件")
-
-	cache := c.cache.(*mockCache)
 	key, err := VariantKey(src, spec, EncoderMagick)
 	require.NoError(t, err)
 	cache.files[key] = &mockFile{data: []byte("cached")}
 
-	_, timing, err = c.CachedVariant(context.Background(), src, spec)
+	hit, err := c.Variant(context.Background(), in)
 	require.NoError(t, err)
-	assert.True(t, timing.CacheHit)
+	assert.True(t, hit.CacheHit)
 }

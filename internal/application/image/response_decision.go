@@ -1,4 +1,4 @@
-package http
+package image
 
 import (
 	"main/internal/shared/transcode"

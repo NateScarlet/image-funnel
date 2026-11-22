@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"net/http/httptest"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	appimage "main/internal/application/image"
+	"main/internal/shared/transcode"
 )
 
 func TestFormatServerTiming(t *testing.T) {
@@ -38,12 +40,18 @@ func TestFormatServerTimingEscapesDesc(t *testing.T) {
 
 func TestHandleImageSetsServerTimingHeader(t *testing.T) {
 	logger := zap.NewNop()
-	coordinator := newTestCoordinator(nil)
-	signer, rootDir, relPath := testSetup(t, logger, coordinator)
+
+	// 注入窄端口测试替身：返回一个转码结果，验证各分段耗时与编码器描述被写入响应头
+	fake := newFakeVariantRetriever(func(context.Context, appimage.VariantInput) (appimage.VariantResult, error) {
+		return transcodeResult(transcode.ImageFormatWebP, "fake-webp"), nil
+	})
+	fake.encoderID = "test-encoder"
+
+	signer, rootDir, relPath := testSetup(t)
 	req := signedRequest(t, signer, rootDir, relPath, []appimage.SignOption{appimage.WithWidth(1024)}, "image/webp")
 
 	rr := httptest.NewRecorder()
-	testHandler(logger, signer, coordinator, rootDir).ServeHTTP(rr, req)
+	testHandler(logger, signer, fake, rootDir).ServeHTTP(rr, req)
 
 	header := rr.Header().Get("Server-Timing")
 	require.NotEmpty(t, header, "每张图片响应都应带分段耗时")

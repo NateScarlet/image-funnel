@@ -10,6 +10,7 @@ import (
 	"main/internal/shared"
 	"main/internal/shared/imageversion"
 	"main/internal/shared/transcode"
+	"main/internal/util"
 	"os"
 	"path/filepath"
 	"time"
@@ -24,19 +25,24 @@ const (
 	EncoderSVTAV1 = "svt-av1"
 )
 
-// TranscodeCoordinator 图片变体转码的编排入口：
-// 先查缓存（命中即返回，不碰队列），未命中则入队转码并等待结果。
+// TranscodeCoordinator 图片变体取回与转码的编排入口：
+// 对外只暴露 Variant 一个 seam——计算一次 key、查一次缓存、未命中探源一次，
+// 并直接产出完整的响应形态决策；需要转码时用同一个 key 入队并等待结果。
 // 同时负责启动 worker 池从队列拉取任务执行转码并写入缓存
 type TranscodeCoordinator struct {
 	cache     Cache
 	processor Processor
 	queue     transcode.Queue
+	probe     SourceProbe
 	// encoderID 当前生效的编码器标识，参与变体 key 计算
 	encoderID string
 	logger    *zap.Logger
 }
 
-func NewTranscodeCoordinator(cache Cache, processor Processor, queue transcode.Queue, encoderID string, logger *zap.Logger) *TranscodeCoordinator {
+func NewTranscodeCoordinator(cache Cache, processor Processor, queue transcode.Queue, probe SourceProbe, encoderID string, logger *zap.Logger) *TranscodeCoordinator {
+	if probe == nil {
+		panic("transcode coordinator requires a source probe")
+	}
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -44,6 +50,7 @@ func NewTranscodeCoordinator(cache Cache, processor Processor, queue transcode.Q
 		cache:     cache,
 		processor: processor,
 		queue:     queue,
+		probe:     probe,
 		encoderID: encoderID,
 		logger:    logger,
 	}
@@ -72,49 +79,111 @@ func VariantKey(absPath string, spec transcode.Spec, encoder string) (string, er
 // EncoderID 当前生效的编码器标识，供响应头 desc 区分编码器
 func (c *TranscodeCoordinator) EncoderID() string { return c.encoderID }
 
-// CachedVariant 只查变体缓存：仅 stat 缓存文件，不打开源图、不入队。
-// 返回 (nil, nil) 表示缓存未命中。用于在决定直出/重定向之前免去一次源图打开
-func (c *TranscodeCoordinator) CachedVariant(ctx context.Context, absPath string, spec transcode.Spec) (transcode.File, transcode.VariantTiming, error) {
-	key, err := VariantKey(absPath, spec, c.encoderID)
-	if err != nil {
-		return nil, transcode.VariantTiming{}, err
+// Variant 取回图片变体，或直接给出重定向决策——应用层唯一的变体取回 seam。
+//
+// 一次调用完成：计算一次变体 key、执行一次缓存 Lookup、未命中探源一次，
+// 并产出完整响应形态；需要转码时用与 Lookup 同一个 key 入队并等待，
+// 不再二次计算 key 或二次查询缓存。HEAD/GET 优先级由输入表达。
+// ctx 结束（客户端断开/请求放弃）时由入队的 ctx 撤回需求登记
+func (c *TranscodeCoordinator) Variant(ctx context.Context, in VariantInput) (VariantResult, error) {
+	// 查询用请求宽度——源宽此时不可知，变体键形状因此保持不变。
+	// w=0 是「全尺寸诉求」，沿用既有规则：不查询变体缓存，探源后决定直出/转码
+	var (
+		spec transcode.Spec
+		key  string
+		err  error
+	)
+	if in.Width > 0 {
+		spec, key, err = c.keyFor(in.AbsPath, in.Width, in.Format)
+		if err != nil {
+			return VariantResult{}, err
+		}
 	}
-	file, err := c.cache.Lookup(ctx, key)
-	return file, transcode.VariantTiming{CacheHit: file != nil}, err
-}
 
-// Acquire 获取一个图片变体：缓存命中直接返回；未命中入队等待转码完成。
-// priority 表达本次需求类别（用户查看=High，预载=Low）。
-// ctx 结束（客户端断开/请求放弃）时自动撤回需求登记——「撤回淘汰未启动任务」
-// 的语义由此保证：登记生命周期由入队时传入的 ctx 表达，无需额外句柄
-func (c *TranscodeCoordinator) Acquire(ctx context.Context, absPath string, spec transcode.Spec, priority transcode.Prio) (transcode.File, transcode.VariantTiming, error) {
-	key, err := VariantKey(absPath, spec, c.encoderID)
-	if err != nil {
-		return nil, transcode.VariantTiming{}, err
+	var cachedFile transcode.File
+	if key != "" {
+		cachedFile, err = c.cache.Lookup(ctx, key)
+		if err != nil {
+			return VariantResult{}, err
+		}
 	}
 
-	file, err := c.cache.Lookup(ctx, key)
-	if err != nil {
-		return nil, transcode.VariantTiming{}, err
+	result := VariantResult{CacheHit: cachedFile != nil}
+	if cachedFile != nil {
+		// 命中即服务缓存：不探源、不重定向、不入队
+		result.Kind = ResponseServeCached
+		result.Format = in.Format
+		result.File = cachedFile
+		return result, nil
 	}
-	if file != nil {
-		return file, transcode.VariantTiming{CacheHit: true}, nil
+
+	// 未命中：一次打开源图，同时取得宽度与 MIME；解码耗时就地测量
+	decodeStart := time.Now()
+	source, err := c.probe.Probe(ctx, in.AbsPath)
+	result.DecodeDuration = time.Since(decodeStart)
+	if err != nil {
+		return VariantResult{}, err
+	}
+	defer source.Reader.Close()
+
+	decision := DecideResponse(ResponseInput{
+		Accept:           in.Accept,
+		Width:            in.Width,
+		SourceWidth:      source.Width,
+		SourceAcceptable: util.Accepts(in.Accept, source.ContentType),
+		Format:           in.Format,
+	})
+	result.Kind = decision.Kind
+	result.Format = decision.Format
+	result.CanonicalWidth = decision.CanonicalWidth
+	result.EffectiveWidth = decision.EffectiveWidth
+	if decision.Kind != ResponseTranscode {
+		return result, nil
+	}
+
+	if key == "" {
+		// w=0 没有缓存查询，入队 key 在此计算一次
+		spec, key, err = c.keyFor(in.AbsPath, decision.EffectiveWidth, in.Format)
+		if err != nil {
+			return VariantResult{}, err
+		}
 	}
 
 	// 计时指针随 item 进入队列：入队时刻由这里给出，排队时长由队列认领时写入，
-	// 编码时长由 worker 写入，三处共享同一结构避免额外的传递通道
+	// 编码时长由 worker 写入，三处共享同一结构避免额外的传递通道。
+	// spec 与 Lookup 共用（转码分支的有效宽度恒等于请求宽度），key 因此完全相同
 	timing := &transcode.VariantTiming{EnqueuedAt: time.Now()}
-	item, err := transcode.NewItem(key, absPath, spec, priority, timing)
+	item, err := transcode.NewItem(key, in.AbsPath, spec, in.Priority, timing)
 	if err != nil {
-		return nil, transcode.VariantTiming{}, err
+		return VariantResult{}, err
 	}
 	waiter, err := c.queue.Enqueue(ctx, item)
 	if err != nil {
-		return nil, transcode.VariantTiming{}, err
+		return VariantResult{}, err
 	}
-	// ctx 结束即撤回需求（HEAD abort / GET 放弃），由 Enqueue 的 ctx 生命周期承担
-	file, err = waiter.Wait(ctx)
-	return file, derefTiming(waiter.Timing()), err
+	file, err := waiter.Wait(ctx)
+	variantTiming := derefTiming(waiter.Timing())
+	result.QueueDuration = variantTiming.QueueDuration
+	result.EncodeDuration = variantTiming.EncodeDuration
+	if err != nil {
+		return VariantResult{}, err
+	}
+	result.File = file
+	return result, nil
+}
+
+// keyFor 是 seam 内唯一的变体 key 计算入口：规格与 key 成对产出，
+// 调用方拿到的 spec 与 key 必然一致，避免分别计算导致的键与产物错配
+func (c *TranscodeCoordinator) keyFor(absPath string, width int, format transcode.ImageFormat) (transcode.Spec, string, error) {
+	spec, err := transcode.NewSpec(width, format)
+	if err != nil {
+		return transcode.Spec{}, "", err
+	}
+	key, err := VariantKey(absPath, spec, c.encoderID)
+	if err != nil {
+		return transcode.Spec{}, "", err
+	}
+	return spec, key, nil
 }
 
 func derefTiming(t *transcode.VariantTiming) transcode.VariantTiming {

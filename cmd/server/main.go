@@ -136,8 +136,10 @@ func main() {
 	}
 	hybridProcessor := stdimage.NewHybridProcessor(magickProcessor, avifProcessor)
 	retryProcessor := appimage.NewRetryProcessor(hybridProcessor, logger)
-	imageProcessor := appimage.NewTranscodeCoordinator(imageCache, retryProcessor, transcodeQueue, avifEncoderID, logger)
-	sourceProbe := appimage.NewSourceProbe(imageProcessor)
+	// 探针与 seam 共用同一个处理器作为元数据后备来源：探针由处理器构造，
+	// seam 再注入探针，避免「seam → 探针 → seam」的构造环
+	sourceProbe := appimage.NewSourceProbe(retryProcessor)
+	imageProcessor := appimage.NewTranscodeCoordinator(imageCache, retryProcessor, transcodeQueue, sourceProbe, avifEncoderID, logger)
 	transcodeCtx, stopTranscodeWorkers := context.WithCancel(context.Background())
 	defer stopTranscodeWorkers()
 	imageProcessor.StartWorkers(transcodeCtx, int(cfg.MagickConcurrency))

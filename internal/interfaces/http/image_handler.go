@@ -15,10 +15,17 @@ import (
 	"main/internal/domain/relpath"
 	"main/internal/infrastructure/urlconv"
 	"main/internal/shared/transcode"
-	"main/internal/util"
 
 	"go.uber.org/zap"
 )
+
+// imageVariantRetriever 是 handleImage 所需的消费者侧窄端口：
+// 只暴露变体取回 seam 与编码器标识，handler 不感知缓存/队列/探针的两阶段编排。
+// 生产环境由 server 注入应用层 TranscodeCoordinator
+type imageVariantRetriever interface {
+	Variant(ctx context.Context, in appimage.VariantInput) (appimage.VariantResult, error)
+	EncoderID() string
+}
 
 // isHEAD 请求方法是否为 HEAD。前端预载用 HEAD 登记转码需求（等待就绪），
 // GET 取回内容；两者共用同一签名 URL
@@ -27,7 +34,7 @@ func isHEAD(r *http.Request) bool { return r.Method == http.MethodHead }
 func handleImage(
 	logger *zap.Logger,
 	signer *urlconv.Signer,
-	coordinator *appimage.TranscodeCoordinator,
+	retriever imageVariantRetriever,
 	probe appimage.SourceProbe,
 	absRootDir string,
 ) http.HandlerFunc {
@@ -61,8 +68,8 @@ func handleImage(
 			return
 		}
 
-		// 分段耗时随响应头返回；命中状态与编码耗时由协调器给出，解码耗时在各分支就地测量
-		timing := ServerTiming{Encoder: coordinator.EncoderID()}
+		// 分段耗时随响应头返回；命中状态与编码耗时由 seam 给出，解码耗时由探针测量
+		timing := ServerTiming{Encoder: retriever.EncoderID()}
 		setTimingHeader := func() {
 			w.Header().Set("Server-Timing", FormatServerTiming(timing))
 		}
@@ -121,71 +128,8 @@ func handleImage(
 		}
 
 		accept := r.Header.Get("Accept")
-		// format 一次请求只协商一次：缓存键与转码规格共用同一结果
-		format := TargetFormat(accept)
-
-		// w>0 时先只查变体缓存：命中即服务，整个过程不打开源图。
-		// 查询用请求宽度——源宽此时不可知，变体键形状因此保持不变。
-		var cachedFile transcode.File
-		var cachedTiming transcode.VariantTiming
-		if width > 0 {
-			spec, err := transcode.NewSpec(width, format)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			cachedFile, cachedTiming, err = coordinator.CachedVariant(r.Context(), absPath, spec)
-			if err != nil {
-				handleAcquireError(w, logger, err)
-				return
-			}
-		}
-
-		input := ResponseInput{Accept: accept, Width: width, Format: format, CacheHit: cachedFile != nil}
-		if !input.CacheHit {
-			// 缓存未命中（或未指定宽度）：一次打开源图，同时取得宽度与 MIME
-			decodeStart := time.Now()
-			source, err := probe.Probe(r.Context(), absPath)
-			timing.DecodeMs = durationMs(time.Since(decodeStart))
-			if err != nil {
-				handleAcquireError(w, logger, err)
-				return
-			}
-			defer source.Reader.Close()
-			input.SourceWidth = source.Width
-			input.SourceAcceptable = util.Accepts(accept, source.ContentType)
-		}
-
-		// 缓存命中/未命中作为显式输入交给决策模块
-		decision := DecideResponse(input)
-		switch decision.Kind {
-		case ResponseServeCached:
-			timing.CacheHit = cachedTiming.CacheHit
-			setTimingHeader()
-			if err := serveVariantFile(w, r, decision.Format, relPath.Base(), cachedFile); err != nil {
-				handleAcquireError(w, logger, err)
-			}
-			return
-		case ResponseRedirectRaw:
-			setTimingHeader()
-			if err := redirectToRaw(w, signer, relPath, query); err != nil {
-				handleAcquireError(w, logger, err)
-			}
-			return
-		case ResponseRedirectCanonicalWidth:
-			setTimingHeader()
-			if err := redirectToCanonicalWidth(w, signer, relPath, query, decision.CanonicalWidth); err != nil {
-				handleAcquireError(w, logger, err)
-			}
-			return
-		}
-
-		// 剩余形态为 Transcode：有效宽度由共享规则给出
-		spec, err := transcode.NewSpec(decision.EffectiveWidth, decision.Format)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
+		// 格式一次请求只协商一次：缓存键与转码规格共用同一结果
+		format := appimage.TargetFormat(accept)
 
 		// HEAD = 登记需求并等待就绪（低优先级）；GET = 用户当前查看（高优先级）。
 		// 两者经由同一缓存与队列，GET 可搭乘进行中的同一转码
@@ -194,17 +138,34 @@ func handleImage(
 			priority = transcode.PrioLow
 		}
 
-		file, variantTiming, err := coordinator.Acquire(r.Context(), absPath, spec, priority)
+		// 一次调用得到完整响应形态决策，handler 只负责渲染
+		result, err := retriever.Variant(r.Context(), appimage.VariantInput{
+			AbsPath: absPath, Width: width, Format: format,
+			Accept: accept, Priority: priority,
+		})
 		if err != nil {
 			handleAcquireError(w, logger, err)
 			return
 		}
-		timing.CacheHit = variantTiming.CacheHit
-		timing.QueueMs = durationMs(variantTiming.QueueDuration)
-		timing.EncodeMs = durationMs(variantTiming.EncodeDuration)
+		timing.CacheHit = result.CacheHit
+		timing.DecodeMs = durationMs(result.DecodeDuration)
+		timing.QueueMs = durationMs(result.QueueDuration)
+		timing.EncodeMs = durationMs(result.EncodeDuration)
 		setTimingHeader()
-		if err := serveVariantFile(w, r, decision.Format, relPath.Base(), file); err != nil {
-			handleAcquireError(w, logger, err)
+
+		switch result.Kind {
+		case appimage.ResponseServeCached, appimage.ResponseTranscode:
+			if err := serveVariantFile(w, r, result.Format, relPath.Base(), result.File); err != nil {
+				handleAcquireError(w, logger, err)
+			}
+		case appimage.ResponseRedirectRaw:
+			if err := redirectToRaw(w, signer, relPath, query); err != nil {
+				handleAcquireError(w, logger, err)
+			}
+		case appimage.ResponseRedirectCanonicalWidth:
+			if err := redirectToCanonicalWidth(w, signer, relPath, query, result.CanonicalWidth); err != nil {
+				handleAcquireError(w, logger, err)
+			}
 		}
 	}
 }

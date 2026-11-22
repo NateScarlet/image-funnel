@@ -17,23 +17,23 @@ import (
 )
 
 type Server struct {
-	logger         *zap.Logger
-	signer         *urlconv.Signer
-	coordinator    *appimage.TranscodeCoordinator
-	sourceProbe    appimage.SourceProbe
-	graphqlHandler http.Handler
-	playground     http.Handler
-	absRootDir     string
-	frontendDir    string
-	corsHosts      []string
-	trustedIPs     []netip.Prefix
-	trustedProxies []netip.Prefix
+	logger           *zap.Logger
+	signer           *urlconv.Signer
+	variantRetriever imageVariantRetriever
+	sourceProbe      appimage.SourceProbe
+	graphqlHandler   http.Handler
+	playground       http.Handler
+	absRootDir       string
+	frontendDir      string
+	corsHosts        []string
+	trustedIPs       []netip.Prefix
+	trustedProxies   []netip.Prefix
 }
 
 func NewServer(
 	logger *zap.Logger,
 	signer *urlconv.Signer,
-	coordinator *appimage.TranscodeCoordinator,
+	variantRetriever imageVariantRetriever,
 	sourceProbe appimage.SourceProbe,
 	graphqlHandler http.Handler,
 	playground http.Handler,
@@ -44,17 +44,17 @@ func NewServer(
 	trustedProxies []netip.Prefix,
 ) *Server {
 	return &Server{
-		logger:         logger,
-		signer:         signer,
-		coordinator:    coordinator,
-		sourceProbe:    sourceProbe,
-		graphqlHandler: graphqlHandler,
-		playground:     playground,
-		absRootDir:     absRootDir,
-		frontendDir:    frontendDir,
-		corsHosts:      corsHosts,
-		trustedIPs:     trustedIPs,
-		trustedProxies: trustedProxies,
+		logger:           logger,
+		signer:           signer,
+		variantRetriever: variantRetriever,
+		sourceProbe:      sourceProbe,
+		graphqlHandler:   graphqlHandler,
+		playground:       playground,
+		absRootDir:       absRootDir,
+		frontendDir:      frontendDir,
+		corsHosts:        corsHosts,
+		trustedIPs:       trustedIPs,
+		trustedProxies:   trustedProxies,
 	}
 }
 
@@ -78,7 +78,7 @@ func (s *Server) Serve(addr string) error {
 	//
 	// 裸 /image 也交给同一 handler：前缀路由不匹配它，若不注册会落入 SPA catch-all
 	// 得到 200 HTML；交给 handler 则按「格式残缺」统一返回 403
-	imageHandler := handleImage(s.logger, s.signer, s.coordinator, s.sourceProbe, s.absRootDir)
+	imageHandler := handleImage(s.logger, s.signer, s.variantRetriever, s.sourceProbe, s.absRootDir)
 	r.HandleFunc("/image", imageHandler)
 	r.PathPrefix(urlconv.ImageURLPrefix).HandlerFunc(imageHandler)
 

@@ -1,4 +1,4 @@
-package http
+package image
 
 import (
 	"testing"
@@ -33,7 +33,7 @@ func TestTargetFormat(t *testing.T) {
 }
 
 func TestDecideResponse(t *testing.T) {
-	// 仅构造 ResponseInput 即可覆盖四类分支，不构造 endpoint handler 或其任何依赖。
+	// 仅构造 ResponseInput 即可覆盖四类分支，不构造 seam、探针或 HTTP 依赖。
 	// CacheHit 为真/假都参与：命中时无条件 ServeCached，不命中时按其余字段决策。
 	tests := []struct {
 		name  string

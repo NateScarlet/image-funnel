@@ -161,68 +161,71 @@ func (w *fakeWaiter) Timing() *transcode.VariantTiming { return w.timing }
 
 func newTestCoordinator(processor Processor) *TranscodeCoordinator {
 	cache := &mockCache{files: make(map[string]transcode.File)}
-	return NewTranscodeCoordinator(cache, processor, newFakeQueue(), EncoderMagick, nil)
+	// 源图 2048 宽、JPEG；Accept 接受 jpeg 时走缩放转码，只接受 webp 时走源图不可接受转码
+	return NewTranscodeCoordinator(cache, processor, newFakeQueue(),
+		&stubSourceProbe{width: 2048, contentType: "image/jpeg"}, EncoderMagick, nil)
 }
 
-func TestAcquireVariant_CacheHitBypassesQueue(t *testing.T) {
+func TestVariant_CacheHitBypassesQueue(t *testing.T) {
 	processor := &fakeProcessor{result: []byte("out")}
 	c := newTestCoordinator(processor)
 	stop := startWorkers(t, c)
 	defer stop()
 
-	src := filepath.Join(t.TempDir(), "a.png")
-	require.NoError(t, os.WriteFile(src, []byte("image"), 0o644))
-
-	spec, err := transcode.NewSpec(1024, transcode.ImageFormatAVIF)
-	require.NoError(t, err)
+	src := writeVariantSource(t)
+	in := VariantInput{
+		AbsPath: src, Width: 1024, Format: transcode.ImageFormatAVIF,
+		Accept: "image/jpeg, image/avif", Priority: transcode.PrioLow,
+	}
 
 	// 预热进缓存
-	prew, _, err := c.Acquire(context.Background(), src, spec, transcode.PrioLow)
+	prew, err := c.Variant(context.Background(), in)
 	require.NoError(t, err)
-	require.NotNil(t, prew)
+	require.NotNil(t, prew.File)
 
 	// 第二次请求应命中缓存
-	again, _, err := c.Acquire(context.Background(), src, spec, transcode.PrioHigh)
+	in.Priority = transcode.PrioHigh
+	again, err := c.Variant(context.Background(), in)
 	require.NoError(t, err)
-	require.NotNil(t, again)
+	require.NotNil(t, again.File)
 
+	assert.Equal(t, ResponseServeCached, again.Kind)
+	assert.True(t, again.CacheHit)
 	assert.Equal(t, 1, len(processor.calls), "processor should only run once")
 }
 
-func TestAcquireVariant_ProcessError(t *testing.T) {
+func TestVariant_ProcessError(t *testing.T) {
 	processor := &fakeProcessor{err: errors.New("boom")}
 	c := newTestCoordinator(processor)
 	stop := startWorkers(t, c)
 	defer stop()
 
-	src := filepath.Join(t.TempDir(), "a.png")
-	require.NoError(t, os.WriteFile(src, []byte("image"), 0o644))
-
-	spec, err := transcode.NewSpec(1024, transcode.ImageFormatWebP)
-	require.NoError(t, err)
-
-	file, _, err := c.Acquire(context.Background(), src, spec, transcode.PrioHigh)
-	assert.Nil(t, file)
+	src := writeVariantSource(t)
+	result, err := c.Variant(context.Background(), VariantInput{
+		AbsPath: src, Width: 1024, Format: transcode.ImageFormatWebP,
+		Accept: "image/jpeg, image/webp", Priority: transcode.PrioHigh,
+	})
+	assert.Nil(t, result.File)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "boom")
 }
 
-func TestAcquireVariant_MissingSource(t *testing.T) {
+func TestVariant_MissingSource(t *testing.T) {
 	processor := &fakeProcessor{result: []byte("out")}
 	c := newTestCoordinator(processor)
 	stop := startWorkers(t, c)
 	defer stop()
 
-	spec, err := transcode.NewSpec(1024, transcode.ImageFormatWebP)
-	require.NoError(t, err)
-
-	file, _, err := c.Acquire(context.Background(), filepath.Join(t.TempDir(), "missing.png"), spec, transcode.PrioHigh)
-	assert.Nil(t, file)
+	result, err := c.Variant(context.Background(), VariantInput{
+		AbsPath: filepath.Join(t.TempDir(), "missing.png"), Width: 1024,
+		Format: transcode.ImageFormatWebP, Accept: "image/webp", Priority: transcode.PrioHigh,
+	})
+	assert.Nil(t, result.File)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, os.ErrNotExist), "error should wrap os.ErrNotExist, got %v", err)
 }
 
-func TestAcquireVariant_ZeroWidthWebPStillTranscodes(t *testing.T) {
+func TestVariant_ZeroWidthWebPStillTranscodes(t *testing.T) {
 	// width=0 且格式为 WebP 时也必须真正转码：源图可能不是 WebP，
 	// 直接返回源文件会把非 WebP 字节标成 image/webp
 	processor := &fakeProcessor{result: []byte("out")}
@@ -230,48 +233,16 @@ func TestAcquireVariant_ZeroWidthWebPStillTranscodes(t *testing.T) {
 	stop := startWorkers(t, c)
 	defer stop()
 
-	src := filepath.Join(t.TempDir(), "a.jpg")
-	require.NoError(t, os.WriteFile(src, []byte("image"), 0o644))
-
-	spec, err := transcode.NewSpec(0, transcode.ImageFormatWebP)
+	src := writeVariantSource(t)
+	result, err := c.Variant(context.Background(), VariantInput{
+		AbsPath: src, Width: 0, Format: transcode.ImageFormatWebP,
+		Accept: "image/webp", Priority: transcode.PrioHigh,
+	})
 	require.NoError(t, err)
+	require.NotNil(t, result.File)
 
-	file, _, err := c.Acquire(context.Background(), src, spec, transcode.PrioHigh)
-	require.NoError(t, err)
-	require.NotNil(t, file)
-
+	assert.Equal(t, ResponseTranscode, result.Kind)
 	assert.Equal(t, 1, len(processor.calls), "zero-width webp must invoke processor")
-}
-
-func TestCachedVariant_DoesNotProcessSource(t *testing.T) {
-	// 只查缓存：命中返回缓存句柄，未命中返回 nil，两者都不得触发转码
-	processor := &fakeProcessor{result: []byte("out")}
-	c := newTestCoordinator(processor)
-	stop := startWorkers(t, c)
-	defer stop()
-
-	src := filepath.Join(t.TempDir(), "a.png")
-	require.NoError(t, os.WriteFile(src, []byte("image"), 0o644))
-
-	spec, err := transcode.NewSpec(1024, transcode.ImageFormatAVIF)
-	require.NoError(t, err)
-
-	// 未命中
-	cached, _, err := c.CachedVariant(context.Background(), src, spec)
-	require.NoError(t, err)
-	assert.Nil(t, cached, "empty cache should miss")
-	assert.Empty(t, processor.calls, "cache lookup must not transcode")
-
-	// 预热后命中
-	file, _, err := c.Acquire(context.Background(), src, spec, transcode.PrioLow)
-	require.NoError(t, err)
-	require.NotNil(t, file)
-	require.Equal(t, 1, len(processor.calls))
-
-	cached, _, err = c.CachedVariant(context.Background(), src, spec)
-	require.NoError(t, err)
-	require.NotNil(t, cached, "warmed cache should hit")
-	assert.Equal(t, 1, len(processor.calls), "cache lookup must not transcode")
 }
 
 func TestVariantKey_StableAndDistinct(t *testing.T) {
@@ -349,21 +320,22 @@ func TestVariantKey_UsesSharedNanoVersion(t *testing.T) {
 	assert.NotEqual(t, key1, key3, "纳秒视图变化必须改变 key")
 }
 
-// Acquire 把请求 ctx 直接交给队列作为登记生命周期：ctx 结束即撤回需求，
+// Variant 把请求 ctx 直接交给队列作为登记生命周期：ctx 结束即撤回需求，
 // 未启动的任务不会交给 worker（与 ADR 0002 的「abort 即撤回需求」一致）
-func TestAcquire_RequestContextWithdrawsDemand(t *testing.T) {
+func TestVariant_RequestContextWithdrawsDemand(t *testing.T) {
 	cache := &mockCache{files: make(map[string]transcode.File)}
 	queue := inmem.NewTranscodeQueue()
-	c := NewTranscodeCoordinator(cache, &fakeProcessor{result: []byte("out")}, queue, EncoderMagick, nil)
+	c := NewTranscodeCoordinator(cache, &fakeProcessor{result: []byte("out")}, queue,
+		&stubSourceProbe{width: 2048, contentType: "image/jpeg"}, EncoderMagick, nil)
 
-	src := filepath.Join(t.TempDir(), "a.png")
-	require.NoError(t, os.WriteFile(src, []byte("image"), 0o644))
-	spec, err := transcode.NewSpec(1024, transcode.ImageFormatWebP)
-	require.NoError(t, err)
+	src := writeVariantSource(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // 客户端在入队前已放弃请求
-	_, _, err = c.Acquire(ctx, src, spec, transcode.PrioLow)
+	_, err := c.Variant(ctx, VariantInput{
+		AbsPath: src, Width: 1024, Format: transcode.ImageFormatWebP,
+		Accept: "image/webp", Priority: transcode.PrioLow,
+	})
 	assert.ErrorIs(t, err, context.Canceled)
 
 	// 撤回先于消费启动，确定性验证该任务不会被认领
