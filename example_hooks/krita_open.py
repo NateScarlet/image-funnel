@@ -13,12 +13,14 @@ import glob
 import json
 import logging
 import os
+import queue
 import shutil
 import subprocess
+import threading
 import time
 from ctypes import wintypes
 from dataclasses import dataclass
-from typing import Any, Callable, List, Tuple, cast
+from typing import Any, BinaryIO, Callable, List, Optional, Protocol, Tuple, cast
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,6 +49,129 @@ def open_in_krita(request: KritaRequest, spawn: Spawner) -> int:
         raise ValueError("No image paths to open in Krita.")
     spawn(request.krita_exe, request.image_paths)
     return len(request.image_paths)
+
+
+# 标签清理 RPC 的注入接缝：对调用者只暴露「通知监听端清理」这一个动作
+class PruneTabsClient(Protocol):
+    def prune_tabs(self) -> None: ...
+
+
+def run_hook(
+    request: KritaRequest,
+    spawn: Spawner,
+    activate: Callable[[], None],
+    rpc_client: PruneTabsClient,
+) -> int:
+    """打开图片、激活窗口，最后通知 Krita 插件清理标签，返回打开的图片数。
+
+    RPC 错误由客户端抛出并原样传播给调用者；无监听端由客户端静默忽略。
+    """
+    count = open_in_krita(request, spawn)
+    activate()
+    rpc_client.prune_tabs()
+    return count
+
+
+# #region 标签清理 RPC 客户端
+
+# 监听端固定在 krita-plugin 注册的 pipe 上，换行分隔 JSON-RPC
+_KRITA_PLUGIN_PIPE = r"\\.\pipe\io.github.natescarlet.krita-plugin"
+_RESPONSE_TIMEOUT_SECONDS = 5.0
+_PRUNE_TABS_REQUEST = (
+    json.dumps(
+        {"jsonrpc": "2.0", "method": "pruneTabs", "params": {}, "id": 1},
+        separators=(",", ":"),
+    ).encode("utf-8")
+    + b"\n"
+)
+
+
+class PipeNotAvailable(Exception):
+    """连接或写入失败：本机没有监听端，属于正常情况。"""
+
+
+class RpcError(Exception):
+    """监听端返回错误响应，或响应不符合协议。"""
+
+
+class PipeTransport(Protocol):
+    """named pipe 系统边界：写入请求并带超时读取一行响应。"""
+
+    def request(self, path: str, payload: bytes, timeout_seconds: float) -> bytes: ...
+
+
+class PruneTabsRpcClient:
+    """把 pruneTabs 请求交给可注入的管道 transport。"""
+
+    def __init__(self, transport: PipeTransport) -> None:
+        self._transport = transport
+
+    def prune_tabs(self) -> None:
+        try:
+            raw = self._transport.request(
+                _KRITA_PLUGIN_PIPE, _PRUNE_TABS_REQUEST, _RESPONSE_TIMEOUT_SECONDS
+            )
+        except PipeNotAvailable:
+            # 没有监听端不影响本次打开动作
+            return
+        _parse_rpc_response(raw)
+
+
+def _parse_rpc_response(raw: bytes) -> None:
+    """把响应分类为「正常完成」或「失败」，失败必须让调用者可见。"""
+    try:
+        response: object = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RpcError("krita-plugin 返回了非法 JSON 响应") from exc
+    if not isinstance(response, dict):
+        raise RpcError("krita-plugin 响应不是 JSON 对象")
+    if "error" in response:
+        raise RpcError(f"krita-plugin 返回错误：{response['error']}")
+    if "result" not in response:
+        raise RpcError("krita-plugin 响应缺少 result")
+
+
+def _read_line_with_timeout(pipe: BinaryIO, timeout_seconds: float) -> bytes:
+    """在守护线程里读取一行；读取有超时上限，超时以异常告知调用者。"""
+    outcome: queue.Queue[Tuple[Optional[bytes], Optional[BaseException]]] = queue.Queue(
+        maxsize=1
+    )
+
+    def read() -> None:
+        try:
+            outcome.put((pipe.readline(), None))
+        except BaseException as exc:
+            outcome.put((None, exc))
+
+    threading.Thread(target=read, daemon=True).start()
+    try:
+        line, error = outcome.get(timeout=timeout_seconds)
+    except queue.Empty:
+        raise TimeoutError("等待 krita-plugin 响应超时") from None
+    if error is not None:
+        raise error
+    return cast(bytes, line)
+
+
+class NamedPipeTransport:
+    """真实管道 transport：仅在最外层入口构建，供 RPC 客户端注入。"""
+
+    def request(self, path: str, payload: bytes, timeout_seconds: float) -> bytes:
+        try:
+            pipe = open(path, "w+b", buffering=0)
+        except OSError as exc:
+            raise PipeNotAvailable(str(exc)) from exc
+        try:
+            try:
+                pipe.write(payload)
+            except OSError as exc:
+                raise PipeNotAvailable(str(exc)) from exc
+            return _read_line_with_timeout(pipe, timeout_seconds)
+        finally:
+            pipe.close()
+
+
+# #endregion
 
 
 # #region 窗口激活
@@ -275,8 +400,8 @@ def main() -> None:
         len(request.image_paths),
         request.image_paths,
     )
-    count = open_in_krita(request, spawn_krita)
-    activate_krita_window()
+    rpc_client = PruneTabsRpcClient(NamedPipeTransport())
+    count = run_hook(request, spawn_krita, activate_krita_window, rpc_client)
     print(f"已在 Krita 中打开 {count} 张图片")
 
 
