@@ -91,9 +91,12 @@ jobs:
           cp image-funnel.exe release/
           cp scripts/windows-dist/* release/
 
-          cd release
-          zip -r ../image-funnel-windows-x64.zip .
-          cd ..
+      - name: Compress Windows Release
+        if: ${{ needs.release-please.outputs.release_created == 'true' }}
+        shell: pwsh
+        # windows-latest 的 Git Bash 没有 zip，GNU tar 的 -a 也不会生成真正的 zip；
+        # 用 runner 自带的 PowerShell 7 打包，条目解压后为 dist/ 及根目录文件。
+        run: Compress-Archive -Path ./release/* -DestinationPath ./image-funnel-windows-x64.zip -Force
 
       - name: Release
         if: ${{ needs.release-please.outputs.release_created == 'true' }}
