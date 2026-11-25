@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 """发送到 Krita 钩子：把选中的图片交给本机 Krita 打开。
 
-启动 Krita，等它的窗口出现后把窗口带到前台。Hook Runner 通过管道捕获钩子输出
-并等待写端关闭，因此必须把 Krita 的标准流全部重定向，否则钩子进程会一直挂住
-直到 Krita 退出。核心逻辑不读取环境变量，图片列表与可执行文件路径由最外层
+优先通过 krita-plugin 的 openImages RPC 在 Krita 内同步打开图片，等图片成为
+活动文档后激活窗口再清理标签；插件未监听时回退为命令行打开并跳过清理。Hook
+Runner 通过管道捕获钩子输出并等待写端关闭，因此回退启动时必须把 Krita 的
+标准流全部重定向。核心逻辑不读取环境变量，图片列表与可执行文件路径由最外层
 入口构造并注入。
 """
 
@@ -51,8 +52,10 @@ def open_in_krita(request: KritaRequest, spawn: Spawner) -> int:
     return len(request.image_paths)
 
 
-# 标签清理 RPC 的注入接缝：对调用者只暴露「通知监听端清理」这一个动作
-class PruneTabsClient(Protocol):
+# Krita 插件 RPC 的注入接缝：打开图片与清理标签两个动作
+class KritaRpcClient(Protocol):
+    def open_images(self, paths: List[str]) -> None: ...
+
     def prune_tabs(self) -> None: ...
 
 
@@ -60,19 +63,27 @@ def run_hook(
     request: KritaRequest,
     spawn: Spawner,
     activate: Callable[[], None],
-    rpc_client: PruneTabsClient,
+    rpc_client: KritaRpcClient,
 ) -> int:
-    """打开图片、激活窗口，最后通知 Krita 插件清理标签，返回打开的图片数。
+    """让插件打开图片后激活窗口并清理标签，返回打开的图片数。
 
-    RPC 错误由客户端抛出并原样传播给调用者；无监听端由客户端静默忽略。
+    有监听端时先同步打开图片，图片成为活动文档后才激活窗口、发送 pruneTabs；
+    无监听端（冷启动或插件未启用）时回退为命令行打开并跳过清理，不等待 pipe
+    就绪。RPC 错误、非法响应与超时由客户端抛出并原样传播给调用者。
     """
-    count = open_in_krita(request, spawn)
+    try:
+        rpc_client.open_images(request.image_paths)
+    except PipeNotAvailable:
+        # 冷启动没有旧标签可清理，插件未监听时也没有清理能力，按原方式打开即可
+        count = open_in_krita(request, spawn)
+        activate()
+        return count
     activate()
     rpc_client.prune_tabs()
-    return count
+    return len(request.image_paths)
 
 
-# #region 标签清理 RPC 客户端
+# #region Krita 插件 RPC 客户端
 
 # 监听端固定在 krita-plugin 注册的 pipe 上，换行分隔 JSON-RPC
 _KRITA_PLUGIN_PIPE = r"\\.\pipe\io.github.natescarlet.krita-plugin"
@@ -86,8 +97,24 @@ _PRUNE_TABS_REQUEST = (
 )
 
 
+def _open_images_request(paths: List[str]) -> bytes:
+    """构造 openImages 请求：参数放在 params.paths，由插件在 Krita 内同步打开。"""
+    return (
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "method": "openImages",
+                "params": {"paths": paths},
+                "id": 1,
+            },
+            separators=(",", ":"),
+        ).encode("utf-8")
+        + b"\n"
+    )
+
+
 class PipeNotAvailable(Exception):
-    """连接或写入失败：本机没有监听端，属于正常情况。"""
+    """连接或写入失败：本机没有监听端，由编排层决定是否回退。"""
 
 
 class RpcError(Exception):
@@ -100,20 +127,28 @@ class PipeTransport(Protocol):
     def request(self, path: str, payload: bytes, timeout_seconds: float) -> bytes: ...
 
 
-class PruneTabsRpcClient:
-    """把 pruneTabs 请求交给可注入的管道 transport。"""
+class PipeKritaRpcClient:
+    """把 openImages / pruneTabs 请求交给可注入的管道 transport。
+
+    传输层失败（PipeNotAvailable、超时）与非法响应一律向上抛出，由编排层
+    决定无监听端时回退、其余失败时让调用者可见。
+    """
 
     def __init__(self, transport: PipeTransport) -> None:
         self._transport = transport
 
+    def open_images(self, paths: List[str]) -> None:
+        raw = self._transport.request(
+            _KRITA_PLUGIN_PIPE,
+            _open_images_request(paths),
+            _RESPONSE_TIMEOUT_SECONDS,
+        )
+        _parse_rpc_response(raw)
+
     def prune_tabs(self) -> None:
-        try:
-            raw = self._transport.request(
-                _KRITA_PLUGIN_PIPE, _PRUNE_TABS_REQUEST, _RESPONSE_TIMEOUT_SECONDS
-            )
-        except PipeNotAvailable:
-            # 没有监听端不影响本次打开动作
-            return
+        raw = self._transport.request(
+            _KRITA_PLUGIN_PIPE, _PRUNE_TABS_REQUEST, _RESPONSE_TIMEOUT_SECONDS
+        )
         _parse_rpc_response(raw)
 
 
@@ -400,7 +435,7 @@ def main() -> None:
         len(request.image_paths),
         request.image_paths,
     )
-    rpc_client = PruneTabsRpcClient(NamedPipeTransport())
+    rpc_client = PipeKritaRpcClient(NamedPipeTransport())
     count = run_hook(request, spawn_krita, activate_krita_window, rpc_client)
     print(f"已在 Krita 中打开 {count} 张图片")
 

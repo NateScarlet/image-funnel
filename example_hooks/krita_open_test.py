@@ -17,9 +17,9 @@ from krita_open import (
     find_krita_window,
     focus_window,
     main,
+    PipeKritaRpcClient,
     NamedPipeTransport,
     PipeNotAvailable,
-    PruneTabsRpcClient,
     RpcError,
     open_in_krita,
     run_hook,
@@ -363,15 +363,15 @@ class FakePipeTransport:
         return self.response
 
 
-class TestPruneTabsRpcClient(unittest.TestCase):
-    """RPC 客户端接缝：协议字节、响应分类与无监听端行为。"""
+class TestPipeKritaRpcClient(unittest.TestCase):
+    """RPC 客户端接缝：两种方法的协议字节、响应分类与 PipeNotAvailable 传播。"""
 
     def test_prune_tabs_sends_exact_protocol_request(self):
         transport = FakePipeTransport(
             b'{"jsonrpc":"2.0","result":{"closed":2},"id":1}\n'
         )
 
-        PruneTabsRpcClient(transport).prune_tabs()
+        PipeKritaRpcClient(transport).prune_tabs()
 
         self.assertEqual(len(transport.requests), 1)
         path, payload, timeout = transport.requests[0]
@@ -381,13 +381,60 @@ class TestPruneTabsRpcClient(unittest.TestCase):
         )
         self.assertGreater(timeout, 0)
 
-    def test_prune_tabs_silently_ignores_missing_listener(self):
-        """连接或写入失败代表没有监听端，必须静默忽略且不影响退出码。"""
-        transport = FakePipeTransport(raises=PipeNotAvailable("no listener"))
+    def test_open_images_sends_exact_protocol_request(self):
+        """openImages 必须把全部路径放进 params.paths，且走同一条 pipe。"""
+        transport = FakePipeTransport(
+            b'{"jsonrpc":"2.0","result":{"opened":2},"id":1}\n'
+        )
 
-        PruneTabsRpcClient(transport).prune_tabs()
+        PipeKritaRpcClient(transport).open_images(["a.png", "b.png"])
 
         self.assertEqual(len(transport.requests), 1)
+        path, payload, timeout = transport.requests[0]
+        self.assertEqual(path, r"\\.\pipe\io.github.natescarlet.krita-plugin")
+        self.assertEqual(
+            payload,
+            b'{"jsonrpc":"2.0","method":"openImages",'
+            b'"params":{"paths":["a.png","b.png"]},"id":1}\n',
+        )
+        self.assertGreater(timeout, 0)
+
+    def test_open_images_reports_missing_listener_to_caller(self):
+        """无监听端必须作为 PipeNotAvailable 抛出，由编排层决定是否回退。"""
+        transport = FakePipeTransport(raises=PipeNotAvailable("no listener"))
+
+        with self.assertRaises(PipeNotAvailable):
+            PipeKritaRpcClient(transport).open_images(["a.png"])
+
+    def test_prune_tabs_reports_missing_listener_to_caller(self):
+        """清理阶段 pipe 消失同样不能静默当成成功。"""
+        transport = FakePipeTransport(raises=PipeNotAvailable("no listener"))
+
+        with self.assertRaises(PipeNotAvailable):
+            PipeKritaRpcClient(transport).prune_tabs()
+
+    def test_open_images_raises_on_rpc_error_response(self):
+        """打开失败的错误响应必须抛给调用者，不能当成打开成功。"""
+        transport = FakePipeTransport(
+            '{"jsonrpc":"2.0","error":{"code":-32603,"message":"无法读取 a.png"},"id":1}\n'.encode(
+                "utf-8"
+            )
+        )
+
+        with self.assertRaises(RpcError):
+            PipeKritaRpcClient(transport).open_images(["a.png"])
+
+    def test_open_images_raises_on_malformed_response(self):
+        """无法解析的响应不能当作打开成功。"""
+        with self.assertRaises(RpcError):
+            PipeKritaRpcClient(FakePipeTransport(b"not json\n")).open_images(["a.png"])
+
+    def test_open_images_propagates_timeout(self):
+        """读取超时必须向调用者可见。"""
+        transport = FakePipeTransport(raises=TimeoutError("timeout"))
+
+        with self.assertRaises(TimeoutError):
+            PipeKritaRpcClient(transport).open_images(["a.png"])
 
     def test_prune_tabs_raises_on_rpc_error_response(self):
         """监听端报错必须抛给调用者，不能只写日志后当成功。"""
@@ -396,12 +443,12 @@ class TestPruneTabsRpcClient(unittest.TestCase):
         )
 
         with self.assertRaises(RpcError):
-            PruneTabsRpcClient(transport).prune_tabs()
+            PipeKritaRpcClient(transport).prune_tabs()
 
     def test_prune_tabs_raises_on_malformed_response(self):
         """无法解析的响应不能当作成功。"""
         with self.assertRaises(RpcError):
-            PruneTabsRpcClient(FakePipeTransport(b"not json\n")).prune_tabs()
+            PipeKritaRpcClient(FakePipeTransport(b"not json\n")).prune_tabs()
 
     def test_pipe_transport_times_out_when_listener_never_responds(self):
         """监听端不回响应时读取必须超时，不能永久阻塞。"""
@@ -420,29 +467,65 @@ class TestPruneTabsRpcClient(unittest.TestCase):
         pipe.close.assert_called_once()
 
 
-class TestPruneTabsOrchestration(unittest.TestCase):
-    """编排接缝：RPC 调用发生在打开并激活 Krita 之后。"""
+class TestKritaRpcOrchestration(unittest.TestCase):
+    """编排接缝：先 RPC 打开、再激活、最后清理；无监听端时回退命令行打开。"""
 
-    def test_run_hook_prunes_after_opening_and_activating(self):
+    def test_run_hook_opens_images_via_rpc_before_activating_and_pruning(self):
+        """有监听端时不启动 Krita：openImages 成功后才激活并 pruneTabs。"""
         events: List[str] = []
         request = KritaRequest([r"C:\img\a.png"], r"C:\Krita\krita.exe")
 
         def spawn(exe: str, paths: List[str]) -> None:
-            events.append("open")
+            events.append("spawn")
 
         def activate() -> None:
             events.append("activate")
 
+        def open_images(paths: List[str]) -> None:
+            events.append("open_images")
+            self.assertEqual(paths, request.image_paths)
+
         rpc = MagicMock()
+        rpc.open_images.side_effect = open_images
         rpc.prune_tabs.side_effect = lambda: events.append("prune")
 
         count = run_hook(request, spawn, activate, rpc)
 
         self.assertEqual(count, 1)
-        self.assertEqual(events, ["open", "activate", "prune"])
+        self.assertEqual(events, ["open_images", "activate", "prune"])
 
-    def test_run_hook_propagates_rpc_error_to_caller(self):
-        """RPC 错误必须让调用者可见（未捕获异常 => 非零退出码）。"""
+    def test_run_hook_falls_back_to_command_line_when_no_listener(self):
+        """PipeNotAvailable 时按现有方式启动 Krita 并激活，但不发 pruneTabs。"""
+        request = KritaRequest([r"C:\img\a.png"], r"C:\Krita\krita.exe")
+        spawn = MagicMock()
+        activate = MagicMock()
+        rpc = MagicMock()
+        rpc.open_images.side_effect = PipeNotAvailable("no listener")
+
+        count = run_hook(request, spawn, activate, rpc)
+
+        self.assertEqual(count, 1)
+        spawn.assert_called_once_with(request.krita_exe, request.image_paths)
+        activate.assert_called_once_with()
+        rpc.prune_tabs.assert_not_called()
+
+    def test_run_hook_propagates_open_images_error_to_caller(self):
+        """openImages 报错时不回退、不激活，让调用者可见。"""
+        request = KritaRequest([r"C:\img\a.png"], r"C:\Krita\krita.exe")
+        spawn = MagicMock()
+        activate = MagicMock()
+        rpc = MagicMock()
+        rpc.open_images.side_effect = RpcError("rpc failed")
+
+        with self.assertRaises(RpcError):
+            run_hook(request, spawn, activate, rpc)
+
+        spawn.assert_not_called()
+        activate.assert_not_called()
+        rpc.prune_tabs.assert_not_called()
+
+    def test_run_hook_propagates_prune_tabs_error_to_caller(self):
+        """清理阶段的 RPC 错误同样必须让调用者可见（非零退出码）。"""
         rpc = MagicMock()
         rpc.prune_tabs.side_effect = RpcError("rpc failed")
 
@@ -455,17 +538,17 @@ class TestPruneTabsOrchestration(unittest.TestCase):
             )
 
     def test_main_wires_real_rpc_client_into_hook(self):
-        """入口必须把真实 RPC 客户端注入编排，否则清理动作不会实际发生。"""
+        """入口必须把真实 RPC 客户端注入编排，否则打开与清理不会实际发生。"""
         request = KritaRequest([r"C:\img\a.png"], r"C:\Krita\krita.exe")
         with patch("krita_open.build_request_from_env", return_value=request):
             with patch("krita_open.run_hook") as hook:
                 main()
 
         rpc_client = hook.call_args.args[3]
-        self.assertIsInstance(rpc_client, PruneTabsRpcClient)
+        self.assertIsInstance(rpc_client, PipeKritaRpcClient)
 
     def test_main_exits_normally_when_plugin_has_no_listener(self):
-        """无监听端时入口不报错、不输出错误提示，图片照常打开。"""
+        """无监听端时入口不报错、不输出错误提示，图片照常打开且不清理。"""
         request = KritaRequest([r"C:\img\a.png"], r"C:\Krita\krita.exe")
         transport = FakePipeTransport(raises=PipeNotAvailable("no listener"))
 
@@ -476,9 +559,41 @@ class TestPruneTabsOrchestration(unittest.TestCase):
                         with patch("builtins.print") as printer:
                             main()
 
+        self.assertEqual(
+            len(transport.requests), 1
+        )  # 只尝试 openImages，不发 pruneTabs
         spawn.assert_called_once_with(request.krita_exe, request.image_paths)
         activate.assert_called_once_with()
         printer.assert_called_once_with("已在 Krita 中打开 1 张图片")
+
+    def test_main_sends_open_images_then_prune_when_listener_present(self):
+        """有监听端时入口走 RPC 打开与清理，不重复用命令行启动 Krita。"""
+        request = KritaRequest([r"C:\img\a.png"], r"C:\Krita\krita.exe")
+        transport = FakePipeTransport(
+            b'{"jsonrpc":"2.0","result":{"opened":1},"id":1}\n'
+        )
+
+        with patch("krita_open.build_request_from_env", return_value=request):
+            with patch("krita_open.spawn_krita") as spawn:
+                with patch("krita_open.activate_krita_window") as activate:
+                    with patch("krita_open.NamedPipeTransport", return_value=transport):
+                        with patch("builtins.print"):
+                            main()
+
+        spawn.assert_not_called()
+        activate.assert_called_once_with()
+        self.assertEqual(len(transport.requests), 2)
+        open_payload, prune_payload = (
+            transport.requests[0][1],
+            transport.requests[1][1],
+        )
+        self.assertEqual(
+            json.loads(open_payload.decode("utf-8"))["params"]["paths"],
+            request.image_paths,
+        )
+        self.assertEqual(
+            json.loads(prune_payload.decode("utf-8"))["method"], "pruneTabs"
+        )
 
 
 if __name__ == "__main__":
