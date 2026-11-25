@@ -24,6 +24,8 @@
     "@juggle/resize-observer": "^3.4.0",
     "@mdi/js": "^7.4.47",
     "@noble/hashes": "^2.0.1",
+    "@sentry/browser": "^11.17.0",
+    "@sentry/vue": "11.17.0",
     "@simplewebauthn/browser": "^13.3.0",
     "core-js": "^3.48.0",
     "date-fns": "^4.4.0",

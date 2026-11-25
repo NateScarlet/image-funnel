@@ -23,6 +23,7 @@ func (r *queryResolver) Meta(ctx context.Context) (*Meta, error) {
 		Version:                r.version,
 		BaseURL:                r.baseURL,
 		ServerStartTime:        r.serverStartTime,
+		SentryDsn:              r.sentryDSN,
 		LoadLatencyThresholdMs: threshold,
 	}, nil
 }

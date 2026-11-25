@@ -9,6 +9,7 @@ import type {
 import type { PositionedDirectory } from "@/composables/domain/useDirectoryBrowse";
 import { createDirectorySortKey } from "@/utils/directoryOrder";
 import { directoryCursorKey, type SessionDirectoryCursor } from "./useDirectoryCursor";
+import type { NavigationEvent } from "@/utils/telemetry";
 
 // #region Mock Setup
 const mocks = vi.hoisted(() => ({
@@ -192,9 +193,12 @@ function setup(sessionId: string, currentDirectory: DirectoryFragment) {
   }
 
   const scope = effectScope();
-  const result = scope.run(() => useSessionNextDirectory(sessionId, () => currentDirectory));
+  const capture = vi.fn<(event: NavigationEvent) => void>();
+  const result = scope.run(() =>
+    useSessionNextDirectory(sessionId, () => currentDirectory, capture),
+  );
   if (!result) throw new Error("failed to create composable");
-  return { scope, ...result };
+  return { scope, capture, ...result };
 }
 // #endregion
 
@@ -658,5 +662,35 @@ describe("useSessionNextDirectory", () => {
     } finally {
       reloaded.scope.stop();
     }
+  });
+
+  test("决策埋点记录游标、统计刷新与命中分支", async () => {
+    const current = makeDir("dir-a");
+    const next = makeDir("dir-c");
+    const statsA = statsWithUnrated(10);
+    addPage([current, next]);
+    setStats("dir-a", statsA);
+    setStats("dir-c", statsWithUnrated(10));
+    enter("dir-a", statsA);
+
+    const { scope, capture, resolveNextDirectory } = setup("session-1", current);
+    try {
+      await expect(resolveNextDirectory()).resolves.toBe("dir-c");
+    } finally {
+      scope.stop();
+    }
+
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        step: "decision-resolved",
+        decisionBranch: "immediate",
+        nextDirectoryId: "dir-c",
+        cursor: expect.objectContaining({ sortKey: expect.any(String) }),
+        stats: expect.arrayContaining([
+          expect.objectContaining({ id: "dir-c", isCompleted: false }),
+        ]),
+      }),
+    );
+    expect(capture).toHaveBeenCalledWith(expect.objectContaining({ step: "stats-refreshed" }));
   });
 });

@@ -12,6 +12,7 @@ import {
   type AutoNavigateAfterCommitDeps,
 } from "./useAutoNavigateAfterCommit";
 import { DirectoryPageWaitCancelledError } from "@/utils/directoryPageWaitCancelled";
+import type { NavigationEvent } from "@/utils/telemetry";
 import type { SessionFragment } from "@/graphql/generated";
 
 // #region 测试数据与辅助
@@ -68,6 +69,14 @@ function makeDeps(
     navigateToSession: vi.fn(async () => undefined),
     navigateHome: vi.fn(async () => undefined),
     showLocalError: vi.fn(),
+    capture: vi.fn<(event: NavigationEvent) => void>(),
+    navigationContext: vi.fn(() => ({
+      cursor: { after: "cursor-1", sortKey: "sort-1", query: undefined },
+      stats: [{ id: "dir-2", isCompleted: false }],
+      decisionBranch: "paged" as const,
+    })),
+    routeSnapshot: vi.fn(() => "/session/session-1"),
+    verifyNavigation: vi.fn(async () => "switched" as const),
     ...overrides,
   };
 }
@@ -262,5 +271,145 @@ describe("useAutoNavigateAfterCommit 提交后切换编排", () => {
     await fireAndSettle(switchToNextDirectory);
     expect(deps.resolveNextDirectory).toHaveBeenCalledTimes(2);
     expect(deps.navigateToSession).toHaveBeenCalledWith("session-2");
+  });
+});
+
+describe("useAutoNavigateAfterCommit 导航链路埋点", () => {
+  test("重复触发被单飞锁拦截时记录当前目录上下文", async () => {
+    let resolveDecision!: (id: string | undefined) => void;
+    const capture = vi.fn<(event: NavigationEvent) => void>();
+    const deps = makeDeps({
+      capture,
+      resolveNextDirectory: vi.fn(
+        () =>
+          new Promise<string | undefined>((resolve) => {
+            resolveDecision = resolve;
+          }),
+      ),
+    });
+    const { switchToNextDirectory } = useAutoNavigateAfterCommit(makeSession(), deps);
+
+    vi.useFakeTimers();
+    try {
+      switchToNextDirectory();
+      // 延时未到时再次触发：跳过等待，立即进入序列
+      switchToNextDirectory();
+      // 序列进行中再次触发：被单飞锁拦截
+      switchToNextDirectory();
+      resolveDecision(undefined);
+      await flushPromises();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        step: "duplicate-skipped",
+        sessionId: "session-1",
+        directoryId: "dir-1",
+        directoryRelPath: "dir-1",
+      }),
+    );
+  });
+
+  test("成功链路记录决策、建会话与跳转", async () => {
+    const capture = vi.fn<(event: NavigationEvent) => void>();
+    const deps = makeDeps({ capture, resolveNextDirectory: vi.fn(async () => "dir-2") });
+    const { switchToNextDirectory } = useAutoNavigateAfterCommit(makeSession(), deps);
+
+    await fireAndSettle(switchToNextDirectory);
+
+    const steps = capture.mock.calls.map(([event]) => event.step);
+    expect(steps).toEqual([
+      "navigation-started",
+      "decision-started",
+      "decision-resolved",
+      "session-created",
+      "navigated-to-session",
+    ]);
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({ step: "decision-resolved", nextDirectoryId: "dir-2" }),
+    );
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({ step: "navigated-to-session", nextDirectoryId: "dir-2" }),
+    );
+  });
+
+  test("失败按类别埋点，携带错误分类与统计快照", async () => {
+    const capture = vi.fn<(event: NavigationEvent) => void>();
+    const deps = makeDeps({
+      capture,
+      resolveNextDirectory: vi
+        .fn<() => Promise<string | undefined>>()
+        .mockRejectedValueOnce(new Error("目录分页未能推进：已取页但没有新增目录")),
+    });
+    const { switchToNextDirectory } = useAutoNavigateAfterCommit(makeSession(), deps);
+
+    await fireAndSettle(switchToNextDirectory);
+
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        step: "error-classified",
+        errorClass: "local",
+        message: "目录分页未能推进：已取页但没有新增目录",
+        statsSnapshot: expect.objectContaining({ isCompleted: true }),
+        cursor: { after: "cursor-1", sortKey: "sort-1", query: undefined },
+        stats: [{ id: "dir-2", isCompleted: false }],
+        decisionBranch: "paged",
+      }),
+    );
+  });
+
+  test("导航后仍停在原视图时上报独立事件", async () => {
+    const capture = vi.fn<(event: NavigationEvent) => void>();
+    const deps = makeDeps({
+      capture,
+      resolveNextDirectory: vi.fn(async () => undefined),
+      verifyNavigation: vi.fn(async () => "unchanged" as const),
+    });
+    const { switchToNextDirectory } = useAutoNavigateAfterCommit(makeSession(), deps);
+
+    await fireAndSettle(switchToNextDirectory);
+
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        step: "navigation-not-switched",
+        errorClass: "local",
+        cursor: { after: "cursor-1", sortKey: "sort-1", query: undefined },
+        stats: [{ id: "dir-2", isCompleted: false }],
+      }),
+    );
+  });
+
+  test("导航后闪烁回原视图时上报独立事件", async () => {
+    const capture = vi.fn<(event: NavigationEvent) => void>();
+    const deps = makeDeps({
+      capture,
+      resolveNextDirectory: vi.fn(async () => "dir-2"),
+      verifyNavigation: vi.fn(async () => "flicker" as const),
+    });
+    const { switchToNextDirectory } = useAutoNavigateAfterCommit(makeSession(), deps);
+
+    await fireAndSettle(switchToNextDirectory);
+
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({ step: "navigation-flicker", errorClass: "local" }),
+    );
+  });
+
+  test("取页取消与 Apollo 错误分别归类，不重复提示", async () => {
+    const capture = vi.fn<(event: NavigationEvent) => void>();
+    const deps = makeDeps({
+      capture,
+      resolveNextDirectory: vi
+        .fn<() => Promise<string | undefined>>()
+        .mockRejectedValueOnce(new DirectoryPageWaitCancelledError("已取消")),
+    });
+    const { switchToNextDirectory } = useAutoNavigateAfterCommit(makeSession(), deps);
+
+    await fireAndSettle(switchToNextDirectory);
+
+    expect(capture).not.toHaveBeenCalledWith(expect.objectContaining({ step: "error-classified" }));
+    expect(deps.showLocalError).not.toHaveBeenCalled();
   });
 });

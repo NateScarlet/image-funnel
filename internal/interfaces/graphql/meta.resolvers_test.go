@@ -26,3 +26,22 @@ func TestQueryResolverMetaLoadLatencyThreshold(t *testing.T) {
 		assert.Equal(t, 750, *meta.LoadLatencyThresholdMs)
 	})
 }
+
+func TestQueryResolverMetaSentryDSN(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		dsn  string
+	}{
+		{name: "disabled is empty", dsn: ""},
+		{name: "self hosted dsn", dsn: "http://self@localhost:34898/0"},
+		{name: "external dsn passthrough", dsn: "https://abc123@o12345.ingest.sentry.io/67890"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &queryResolver{Resolver: &Resolver{sentryDSN: tc.dsn}}
+
+			meta, err := r.Meta(context.Background())
+			require.NoError(t, err)
+			assert.Equal(t, tc.dsn, meta.SentryDsn)
+		})
+	}
+}

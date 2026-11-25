@@ -4,6 +4,7 @@ query Meta {
     version
     baseURL
     serverStartTime
+    sentryDsn
     loadLatencyThresholdMs
   }
 }

@@ -28,6 +28,10 @@ type Server struct {
 	corsHosts        []string
 	trustedIPs       []netip.Prefix
 	trustedProxies   []netip.Prefix
+	// envelopeHandler/envelopePath 仅在自托管模式注入；为零时不注册接收端点
+	envelopeHandler http.Handler
+	envelopePath    string
+	isDev           bool
 }
 
 func NewServer(
@@ -42,6 +46,9 @@ func NewServer(
 	corsHosts []string,
 	trustedIPs []netip.Prefix,
 	trustedProxies []netip.Prefix,
+	envelopeHandler http.Handler,
+	envelopePath string,
+	isDev bool,
 ) *Server {
 	return &Server{
 		logger:           logger,
@@ -55,10 +62,15 @@ func NewServer(
 		corsHosts:        corsHosts,
 		trustedIPs:       trustedIPs,
 		trustedProxies:   trustedProxies,
+		envelopeHandler: envelopeHandler,
+		envelopePath:    envelopePath,
+		isDev:           isDev,
 	}
 }
 
-func (s *Server) Serve(addr string) error {
+// newRouter 构建全部 HTTP 路由。抽出成独立方法使「自托管模式才注册 envelope 端点」
+// 可以在不监听端口的情况下被测试。
+func (s *Server) newRouter() *mux.Router {
 	r := mux.NewRouter()
 
 	r.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
@@ -82,16 +94,23 @@ func (s *Server) Serve(addr string) error {
 	r.HandleFunc("/image", imageHandler)
 	r.PathPrefix(urlconv.ImageURLPrefix).HandlerFunc(imageHandler)
 
-	addStaticRoutes(r, s.frontendDir)
+	if s.envelopeHandler != nil && s.envelopePath != "" {
+		r.Path(s.envelopePath).Methods(http.MethodPost).Handler(s.envelopeHandler)
+	}
 
+	addStaticRoutes(r, s.frontendDir)
+	return r
+}
+
+func (s *Server) Serve(addr string) error {
 	handler := cors.New(cors.Options{
 		AllowOriginFunc: func(origin string) bool {
-			return isOriginAllowed(origin, "", s.corsHosts)
+			return (s.isDev && isDevOriginAllowed(origin)) || isOriginAllowed(origin, "", s.corsHosts)
 		},
 		AllowedMethods:   []string{"GET", "HEAD", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Apollo-Tracing", "Apollo-Query-Plan", "Token-Transfer"},
 		AllowCredentials: true,
-	}).Handler(r)
+	}).Handler(s.newRouter())
 
 	// Real IP middleware
 	next := handler

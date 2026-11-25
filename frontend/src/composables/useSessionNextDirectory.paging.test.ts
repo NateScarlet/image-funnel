@@ -264,7 +264,11 @@ function enterDirectory(entry: { id: string; pageAfter: string | null; sortKey: 
 
 function createNavigator(directoryId: string) {
   return runInScope(() =>
-    useSessionNextDirectory("session-1", () => directoryDto(directoryIndexById(directoryId))),
+    useSessionNextDirectory(
+      "session-1",
+      () => directoryDto(directoryIndexById(directoryId)),
+      vi.fn(),
+    ),
   );
 }
 

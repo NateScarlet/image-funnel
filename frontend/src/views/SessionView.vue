@@ -324,19 +324,22 @@ import { useAutoCreateSession } from "../composables/useAutoCreateSession";
 import {
   useAutoNavigateAfterCommit,
   type CreateNextSessionInput,
+  type NavigationOutcome,
 } from "../composables/useAutoNavigateAfterCommit";
 import useMarkImage from "@/composables/useMarkImage";
 import useNotification from "@/composables/useNotification";
 import useDisplayedImage, { type ImageLoadedEvent } from "@/composables/useDisplayedImage";
 import useRatedRejectFlash from "@/composables/useRatedRejectFlash";
-import useRoundChangeFlash from "@/composables/useRoundChangeFlash";
-import useLoadLatencyRecorder from "@/composables/useLoadLatencyRecorder";
+import sleep from "@/utils/sleep";
+import { classifyNavigationOutcome } from "@/utils/navigationOutcome";
 import { useFileSystemContext } from "@/composables/useFileSystemContext";
+import useRoundChangeFlash from "@/composables/useRoundChangeFlash";
 import {
-  submitLoadLatencySegment,
-  beaconLoadLatencySegment,
-} from "@/graphql/utils/loadLatencySubmit";
-import { createLoadLatencyRunId } from "@/utils/loadLatency/runId";
+  captureMarkPerformance,
+  captureNavigationEvent,
+  sessionNavigationContext,
+  type CaptureNavigationEvent,
+} from "@/utils/telemetry";
 import { getStarColorVar } from "@/utils/starConfig";
 
 const props = defineProps<{
@@ -399,11 +402,20 @@ const swipeDirection = computed((): "UP" | "DOWN" | "LEFT" | "RIGHT" | null => {
 
 const { session } = useSession(sessionId, { loadingCount });
 
+// 导航埋点的组合根：注入同一个出口给决策与编排 composable，
+// 并补齐它们掌握不到的会话级上下文（决策 composable 已自带游标与目录统计）
+const captureNavigation: CaptureNavigationEvent = (event) =>
+  captureNavigationEvent({
+    ...(session.value ? sessionNavigationContext(session.value) : {}),
+    ...event,
+  });
+
 // 会话入口即生成导航游标：完成视图挂载时当前目录往往已被筛成完成态，
 // 不能再依赖挂载时的列表重新生成。
-const { nextDirectoryId, resolveNextDirectory } = useSessionNextDirectory(
+const { nextDirectoryId, resolveNextDirectory, navigationContext } = useSessionNextDirectory(
   () => sessionId.value,
   () => session.value?.directory,
+  captureNavigation,
 );
 
 // 在最外层构建「提交后切换」用例的依赖：决策来自导航 composable，
@@ -425,6 +437,19 @@ const { autoCreateSession } = useAutoCreateSession(
   }),
 );
 
+function currentRoutePath(): string {
+  return router.currentRoute.value.fullPath;
+}
+
+// 路由 promise 完成不等于视图真的切换：同时看路由与完成视图是否还在，观察两次区分"没切换"与"闪烁"
+async function verifyNavigation(before: string): Promise<NavigationOutcome> {
+  await sleep(400);
+  const first = { route: currentRoutePath(), completed: !!completedView.value };
+  await sleep(300);
+  const second = { route: currentRoutePath(), completed: !!completedView.value };
+  return classifyNavigationOutcome(before, first, second);
+}
+
 const { showError, show: showNotification, remove: removeNotification } = useNotification();
 const { switchToNextDirectory } = useAutoNavigateAfterCommit(() => session.value, {
   resolveNextDirectory,
@@ -436,6 +461,10 @@ const { switchToNextDirectory } = useAutoNavigateAfterCommit(() => session.value
   navigateToSession: (id) => router.push({ name: "session", params: { id } }),
   navigateHome: () => router.push("/"),
   showLocalError: (message) => showError(message),
+  capture: captureNavigation,
+  navigationContext,
+  routeSnapshot: currentRoutePath,
+  verifyNavigation,
 });
 
 const currentImage = computed(() => session.value?.currentImage ?? undefined);
@@ -448,7 +477,6 @@ const {
   gestureTargetId,
   handleImageLoaded: handleDisplayedImageLoaded,
   recordGestureEnd,
-  loadedRequests,
 } = useDisplayedImage(sessionId, () => currentImage.value?.id);
 
 // #region 换轮提示
@@ -606,54 +634,26 @@ useEventListeners(window, ({ on }) => {
   });
 });
 
-// 归因记录复用启动时的 Meta 阈值；未开启时 recorder 的所有入口都是空操作
 const { loadLatencyThresholdMs } = useFileSystemContext();
-const loadLatencyRecorder = useLoadLatencyRecorder({
-  thresholdMs: loadLatencyThresholdMs,
-  submit: submitLoadLatencySegment,
-  beacon: beaconLoadLatencySegment,
-  createRunId: createLoadLatencyRunId,
-});
-
-// 会话切换即丢弃积压，不等待下一条动作到来，避免 pagehide 提交上一会话的数据
-watch(sessionId, () => loadLatencyRecorder.discard());
-
-// 页面隐藏/卸载时用 beacon 兜底，不让未提交积压静默消失
-useEventListeners(window, ({ on }) => {
-  on("pagehide", () => loadLatencyRecorder.flushOnHide(), { passive: true });
-});
-useEventListeners(document, ({ on }) => {
-  on(
-    "visibilitychange",
-    () => {
-      if (document.visibilityState === "hidden") {
-        loadLatencyRecorder.flushOnHide();
-      }
-    },
-    { passive: true },
-  );
-});
 
 const { marking, mark: originalMarkImage } = useMarkImage(sessionId, loadedAt, {
   autoRejectTimeoutMs: () => (autoRejectEnabled.value ? autoRejectTimeoutSeconds.value * 1000 : 0),
   onMark: (ctx) => {
-    loadLatencyRecorder.record({
-      sessionId: ctx.sessionId,
-      round: session.value?.currentRound ?? 0,
-      imageId: ctx.imageId,
-      dpr: window.devicePixelRatio || 1,
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight,
-      autoRejectTimeoutMs: ctx.autoRejectTimeoutMs,
-      markIntervalMs: ctx.markIntervalMs,
-      loadMs: ctx.loadMs,
-      loadedAt: ctx.loadedAt?.toISOString() ?? ctx.markAt.toISOString(),
-      markAt: ctx.markAt.toISOString(),
-      requests: loadedRequests.value,
-    });
-    // 慢切换触发提交；提交是诊断旁路，不阻塞标记主流程。
-    // 错误通知由 Apollo 全局 ErrorLink 负责，这里只需吞掉 Promise 拒绝避免 unhandled rejection
-    void loadLatencyRecorder.maybeFlush(ctx.loadMs).catch(() => undefined);
+    // 原加载延迟数据改以 Sentry 事件走新链路；未配置 DSN 或未超过阈值时 capture 是空操作
+    captureMarkPerformance(
+      {
+        sessionId: ctx.sessionId,
+        round: session.value?.currentRound ?? 0,
+        imageId: ctx.imageId,
+        dpr: window.devicePixelRatio || 1,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        autoRejectTimeoutMs: ctx.autoRejectTimeoutMs,
+        markIntervalMs: ctx.markIntervalMs,
+        loadMs: ctx.loadMs,
+      },
+      loadLatencyThresholdMs.value,
+    );
   },
 });
 // flash 信号按会话作用域隔离，防止提交后切换到下一目录会话时重放残留动画

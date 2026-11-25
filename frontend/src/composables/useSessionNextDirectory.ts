@@ -28,6 +28,14 @@ import useAsyncTask from "./useAsyncTask";
 import SingleFlightGroup from "@/utils/SingleFlightGroup";
 import ExactSearchMatcher from "@/utils/ExactSearchMatcher";
 import basename from "@/utils/basename";
+import { classifyNavigationError } from "@/utils/telemetry";
+import type {
+  CaptureNavigationEvent,
+  DecisionBranch,
+  NavigationContextSnapshot,
+  NavigationCursorContext,
+  NavigationStatsEntry,
+} from "@/utils/telemetry";
 
 export type SessionDirectory = SessionFragment["directory"];
 
@@ -55,9 +63,56 @@ interface NextDirectoryItem extends NextDirectoryEntry {
 export default function useSessionNextDirectory(
   sessionId: MaybeRefOrGetter<string>,
   currentDirectory: MaybeRefOrGetter<SessionDirectory | undefined>,
+  capture: CaptureNavigationEvent,
 ) {
   const currentId = computed(() => toValue(currentDirectory)?.id ?? "");
   const parentId = computed(() => toValue(currentDirectory)?.parentId ?? "");
+
+  // #region 导航埋点
+  // 只有提交后的决策阶段才埋点：挂载时的统计补齐不属于「提交 → 回主页」链路
+  let decisionTracing = false;
+  let lastDecisionBranch: DecisionBranch = "not-started";
+
+  function cursorContext(): NavigationCursorContext {
+    return {
+      after: cursor.value?.after ?? undefined,
+      sortKey: cursor.value?.sortKey ?? undefined,
+      query: cursor.value?.query ?? undefined,
+    };
+  }
+
+  function statsSnapshot(): NavigationStatsEntry[] {
+    return orderedDirectories.value.map((entry) => ({
+      id: entry.dir.id,
+      isCompleted: entry.visibility.completion.isCompleted,
+      imageCount: entry.stats?.imageCount,
+      subdirectoryCount: entry.stats?.subdirectoryCount,
+    }));
+  }
+
+  /** 供编排 composable 在失败事件里补齐游标、统计与决策分支 */
+  function navigationContext(): NavigationContextSnapshot {
+    return {
+      cursor: cursorContext(),
+      stats: statsSnapshot(),
+      decisionBranch: lastDecisionBranch,
+    };
+  }
+
+  function trace(
+    event: Omit<
+      Parameters<CaptureNavigationEvent>[0],
+      "sessionId" | "directoryId" | "directoryRelPath"
+    >,
+  ): void {
+    capture({
+      sessionId: toValue(sessionId),
+      directoryId: currentId.value || undefined,
+      directoryRelPath: toValue(currentDirectory)?.relPath,
+      ...event,
+    });
+  }
+  // #endregion
 
   // #region 游标与查询
   // 按目录 ID 响应式读取：目录切换时 useStorage 会重新读取对应键
@@ -203,7 +258,22 @@ export default function useSessionNextDirectory(
     if (ids.length === 0) return;
 
     const failures = await refetchStats(ids, abortSignal);
-    if (failures.length > 0) throw failures[0];
+    if (failures.length > 0) {
+      if (decisionTracing) {
+        trace({
+          step: "stats-refresh-failed",
+          errorClass: classifyNavigationError(failures[0]),
+          message: String(failures[0]),
+          cursor: cursorContext(),
+          stats: statsSnapshot(),
+          decisionBranch: lastDecisionBranch,
+        });
+      }
+      throw failures[0];
+    }
+    if (decisionTracing) {
+      trace({ step: "stats-refreshed", cursor: cursorContext() });
+    }
   }
 
   async function prepare(
@@ -270,18 +340,36 @@ export default function useSessionNextDirectory(
       id: frozenPreview.value?.id ?? nextDirectory.value?.dir.id,
     };
 
+    decisionTracing = true;
+    lastDecisionBranch = "not-started";
+    trace({
+      step: "decision-started",
+      cursor: cursorContext(),
+      loadedCount: loadedDirectories.value.length,
+      hasNextPage: hasNextPage.value,
+    });
     try {
       const target = await decideNextDirectory();
       // 预览与决策使用同一次判定结果
       navigationPreview.value = { sessionId: scope, id: target };
       return target;
     } catch (error) {
+      trace({
+        step: "decision-failed",
+        errorClass: classifyNavigationError(error),
+        message: String(error),
+        cursor: cursorContext(),
+        stats: statsSnapshot(),
+        decisionBranch: lastDecisionBranch,
+      });
       // 决策失败：解除冻结，让预览回到实时候选，用户可在提示后重试；
       // 只清除本会话的冻结，不误清其他会话决策窗口内已冻结的预览
       if (navigationPreview.value?.sessionId === scope) {
         navigationPreview.value = undefined;
       }
       throw error;
+    } finally {
+      decisionTracing = false;
     }
   }
 
@@ -296,6 +384,14 @@ export default function useSessionNextDirectory(
     const immediate = nextDirectory.value;
     if (immediate) {
       rememberEntry(immediate);
+      lastDecisionBranch = "immediate";
+      trace({
+        step: "decision-resolved",
+        decisionBranch: lastDecisionBranch,
+        nextDirectoryId: immediate.dir.id,
+        cursor: cursorContext(),
+        stats: statsSnapshot(),
+      });
       return immediate.dir.id;
     }
 
@@ -303,11 +399,28 @@ export default function useSessionNextDirectory(
       const loadedCount = loadedDirectories.value.length;
       // 取页返回时合并结果已可见，之后读取的目录就是新页内容
       await fetchMore("forward");
+      trace({
+        step: "pagination-fetched",
+        cursor: cursorContext(),
+        loadedCount: loadedDirectories.value.length,
+        hasNextPage: hasNextPage.value,
+      });
 
       if (loadedDirectories.value.length <= loadedCount) {
         // 结果已可见却没有新增目录：服务端仍声称有下一页即为游标失效，
         // 必须作为真实错误暴露，不能解释成「没有下一个目录而回主页」
-        if (hasNextPage.value) throw new Error("目录分页未能推进：已取页但没有新增目录");
+        if (hasNextPage.value) {
+          trace({
+            step: "pagination-stalled",
+            errorClass: "local",
+            message: "目录分页未能推进：已取页但没有新增目录",
+            cursor: cursorContext(),
+            stats: statsSnapshot(),
+            decisionBranch: lastDecisionBranch,
+            loadedCount: loadedDirectories.value.length,
+          });
+          throw new Error("目录分页未能推进：已取页但没有新增目录");
+        }
         // 后续页不存在，序列到此耗尽
         break;
       }
@@ -321,10 +434,25 @@ export default function useSessionNextDirectory(
       const found = firstCandidate();
       if (found) {
         rememberEntry(found);
+        lastDecisionBranch = "paged";
+        trace({
+          step: "decision-resolved",
+          decisionBranch: lastDecisionBranch,
+          nextDirectoryId: found.dir.id,
+          cursor: cursorContext(),
+          stats: statsSnapshot(),
+        });
         return found.dir.id;
       }
     }
 
+    lastDecisionBranch = "exhausted";
+    trace({
+      step: "decision-resolved",
+      decisionBranch: lastDecisionBranch,
+      cursor: cursorContext(),
+      stats: statsSnapshot(),
+    });
     return undefined;
   }
 
@@ -332,5 +460,6 @@ export default function useSessionNextDirectory(
     nextDirectory,
     nextDirectoryId,
     resolveNextDirectory,
+    navigationContext,
   };
 }

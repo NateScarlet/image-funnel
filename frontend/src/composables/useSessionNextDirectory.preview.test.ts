@@ -287,7 +287,7 @@ function enterDirectory(index: number, stats: DirectoryStatsFragment): void {
 }
 
 function createNavigator(index: number) {
-  return runInScope(() => useSessionNextDirectory("session-1", () => directoryDto(index)));
+  return runInScope(() => useSessionNextDirectory("session-1", () => directoryDto(index), vi.fn()));
 }
 
 /** 挂起指定目录的统计请求，用来在决策窗口内观察预览是否被冻结 */
@@ -461,7 +461,9 @@ describe("完成视图的导航目标与预览快照（真实统计接缝）", (
 
     const sessionId = ref("session-1");
     const currentDirectory = ref<SessionDirectory>(directoryDto(0));
-    const { scope, value } = runInScope(() => useSessionNextDirectory(sessionId, currentDirectory));
+    const { scope, value } = runInScope(() =>
+      useSessionNextDirectory(sessionId, currentDirectory, vi.fn()),
+    );
     const previewChanges: (string | undefined)[] = [];
     let stop: (() => void) | undefined;
     try {

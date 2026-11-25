@@ -9,6 +9,8 @@ type Meta {
   baseURL: String!
   "服务启动时间"
   serverStartTime: Time!
-  "加载耗时采样阈值（毫秒）。null 表示服务端关闭采集，客户端不应上报"
+  "客户端上报用的 Sentry DSN。空串表示关闭上报；非空时可直接使用 SDK 默认 transport"
+  sentryDsn: String!
+  "加载耗时采样阈值（毫秒）。null 表示关闭性能上报，客户端不应发送性能事件"
   loadLatencyThresholdMs: Int
 }

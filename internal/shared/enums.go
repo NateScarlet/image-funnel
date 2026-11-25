@@ -38,6 +38,21 @@ var (
 
 type PairingRequestStatus = enum.Enum[PairingRequestStatusMeta]
 
+// #region Sentry Enums
+
+type SentryModeMeta struct{}
+
+var sentryMode = enum.New[SentryModeMeta]()
+var (
+	SentryModeOff      = sentryMode.Define("OFF")
+	SentryModeSelf     = sentryMode.Define("SELF")
+	SentryModeExternal = sentryMode.Define("EXTERNAL")
+)
+
+type SentryMode = enum.Enum[SentryModeMeta]
+
+// #endregion
+
 // #region Notification Enums
 
 type NotificationPriorityMeta struct{}

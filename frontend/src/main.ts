@@ -15,6 +15,7 @@ import query from "./graphql/utils/query";
 import { MetaDocument } from "./graphql/generated";
 import { websocketConnected } from "./events";
 import { migrate } from "./migration";
+import { initTelemetry } from "./utils/telemetry";
 
 // 游标导航上线前清理旧的目录顺序记录，避免遗留数据无限期占用 localStorage
 migrate();
@@ -107,4 +108,14 @@ window.addEventListener("vite:preloadError", (event) => {
 
 const app = createApp(App);
 app.use(router);
+
+// 复用现有 meta 查询取得服务端下发的 DSN：空串关闭，非空用 SDK 默认 transport 直发。
+// 初始化是诊断旁路，失败不影响主流程，故以 fire-and-forget 方式发起。
+void query(MetaDocument, {
+  context: { suppressError: true },
+  fetchPolicy: "no-cache",
+})
+  .then(({ data }) => initTelemetry(data?.meta.sentryDsn ?? "", app))
+  .catch(() => undefined);
+
 app.mount("#app");

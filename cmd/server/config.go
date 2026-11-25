@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"main/internal/domain/sentry"
+
 	"go.uber.org/zap"
 )
 
@@ -44,8 +46,10 @@ type Config struct {
 	BaseURL                   string
 	HooksDir                  string
 	UseSystemRecycleBin       bool
-	// LoadLatencyThresholdMs 加载耗时采样阈值（毫秒）。零值表示完全关闭采集，
-	// 启动时通过 Meta 暴露给客户端；负值同样归一到零值，保证安全默认
+	// SentryMode 上报模式，零值表示关闭；SentryDSN 是下发给客户端的 DSN，关闭时为空串
+	SentryMode sentry.Mode
+	SentryDSN  string
+	// LoadLatencyThresholdMs 加载耗时采样阈值（毫秒）。零值表示关闭性能上报，客户端通过 Meta 读取
 	LoadLatencyThresholdMs int
 	// EnableTrainingSampleArchive 是否在主应用提交流程中采集训练样本；默认关闭，零值安全
 	EnableTrainingSampleArchive bool
@@ -179,6 +183,23 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 		baseURL = "http://localhost:" + port
 	}
 
+	// 上报模式由服务端唯一决策：自托管模式生成指向自身 envelope 端点的 DSN，
+	// 外部模式原样透传，非法值直接让启动失败，不静默降级
+	sentryMode, err := sentry.Parse(os.Getenv("IMAGE_FUNNEL_SENTRY_DSN"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid IMAGE_FUNNEL_SENTRY_DSN: %w", err)
+	}
+	var sentryDSN string
+	switch sentryMode {
+	case sentry.ModeSelf:
+		sentryDSN, err = sentry.SelfDSN(baseURL)
+		if err != nil {
+			return nil, fmt.Errorf("invalid IMAGE_FUNNEL_BASE_URL for self-hosted sentry: %w", err)
+		}
+	case sentry.ModeExternal:
+		sentryDSN = os.Getenv("IMAGE_FUNNEL_SENTRY_DSN")
+	}
+
 	webauthnRPID := os.Getenv("IMAGE_FUNNEL_WEBAUTHN_RPID")
 	if webauthnRPID == "" {
 		if baseURL != "" {
@@ -240,7 +261,7 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 				loadLatencyThresholdMs = i
 			}
 		} else {
-			logger.Warn("invalid IMAGE_FUNNEL_LOAD_LATENCY_THRESHOLD_MS, load latency sampling disabled",
+			logger.Warn("invalid IMAGE_FUNNEL_LOAD_LATENCY_THRESHOLD_MS, load latency reporting disabled",
 				zap.String("value", v))
 		}
 	}
@@ -283,6 +304,8 @@ func loadConfig(logger *zap.Logger, version string) (*Config, error) {
 		BaseURL:                     baseURL,
 		HooksDir:                    hooksDir,
 		UseSystemRecycleBin:         useSystemRecycleBin,
+		SentryMode:                  sentryMode,
+		SentryDSN:                   sentryDSN,
 		LoadLatencyThresholdMs:      loadLatencyThresholdMs,
 		EnableTrainingSampleArchive: enableTrainingSampleArchive,
 	}, nil

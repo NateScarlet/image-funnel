@@ -33,3 +33,4 @@ frontend/public/static/open-dir/
 __pycache__
 .venv
 .scratch
+.trash/

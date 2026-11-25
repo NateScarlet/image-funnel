@@ -1,6 +1,0 @@
-mutation AppendLoadLatencySegment($input: AppendLoadLatencySegmentInput!) {
-  appendLoadLatencySegment(input: $input) {
-    path
-    clientMutationId
-  }
-}

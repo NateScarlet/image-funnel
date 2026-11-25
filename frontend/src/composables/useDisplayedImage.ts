@@ -1,6 +1,5 @@
 import { computed, shallowRef, toValue, type MaybeRefOrGetter } from "vue";
 import Time from "@/utils/Time";
-import type { RequestRecord } from "@/utils/loadLatency/types";
 
 /**
  * 人类反应时间阈值（毫秒）。
@@ -11,8 +10,6 @@ export const GESTURE_REACTION_TIME_MS = 100;
 export interface ImageLoadedEvent {
   id: string;
   time: Time;
-  /** 这张图显示之前窗口内观察到的请求，供归因记录使用 */
-  requests?: RequestRecord[];
 }
 
 export interface GestureEndEvent {
@@ -58,8 +55,6 @@ export default function useDisplayedImage(
     const buffer = loadedBuffer.value;
     return buffer !== undefined && buffer.sessionId === toValue(sessionId) ? buffer : undefined;
   });
-
-  const loadedRequests = computed(() => loaded.value?.current.requests ?? []);
 
   const gestureEnd = computed(() => {
     const buffer = gestureEndBuffer.value;
@@ -144,7 +139,6 @@ export default function useDisplayedImage(
   return {
     displayedId,
     loadedAt,
-    loadedRequests,
     gestureTargetId,
     handleImageLoaded,
     recordGestureEnd,

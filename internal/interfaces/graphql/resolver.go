@@ -15,11 +15,13 @@ type Resolver struct {
 	version         string
 	baseURL         string
 	serverStartTime time.Time
+	// sentryDSN 下发给客户端的标准 DSN；空串表示关闭上报
+	sentryDSN string
 	// loadLatencyThresholdMs 加载耗时采样阈值；≤0 表示关闭，对客户端暴露为 null
 	loadLatencyThresholdMs int
 }
 
-func NewResolver(app *application.Root, rootDir string, signer *urlconv.Signer, version string, baseURL string, loadLatencyThresholdMs int) *Resolver {
+func NewResolver(app *application.Root, rootDir string, signer *urlconv.Signer, version string, baseURL string, sentryDSN string, loadLatencyThresholdMs int) *Resolver {
 	return &Resolver{
 		app:                    app,
 		rootDir:                rootDir,
@@ -27,6 +29,7 @@ func NewResolver(app *application.Root, rootDir string, signer *urlconv.Signer, 
 		version:                version,
 		baseURL:                baseURL,
 		serverStartTime:        time.Now(),
+		sentryDSN:              sentryDSN,
 		loadLatencyThresholdMs: loadLatencyThresholdMs,
 	}
 }

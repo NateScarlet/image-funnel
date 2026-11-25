@@ -18,7 +18,6 @@ import (
 	appdirectory "main/internal/application/directory"
 	apphook "main/internal/application/hook"
 	appimage "main/internal/application/image"
-	apploadlatency "main/internal/application/loadlatency"
 	appnote "main/internal/application/note"
 	appnotification "main/internal/application/notification"
 	apppairing "main/internal/application/pairing"
@@ -27,6 +26,7 @@ import (
 	domdirectory "main/internal/domain/directory"
 	"main/internal/domain/image"
 	"main/internal/domain/note"
+	"main/internal/domain/sentry"
 	domnotification "main/internal/domain/notification"
 	"main/internal/domain/pairing"
 	"main/internal/domain/session"
@@ -105,13 +105,18 @@ func main() {
 
 	signer := urlconv.NewSigner(cfg.SecretKey, cfg.AbsRootDir)
 
-	// 加载延迟归因段的落盘目录：启动时解析为绝对路径并打出日志，便于确认写到了哪里
-	loadLatencyAppender, err := localfs.NewLoadLatencyAppender(filepath.Join(cfg.DataDir, "load-latency"))
-	if err != nil {
-		logger.Fatal("failed to resolve load latency directory", zap.Error(err))
+	// 自托管模式才装配 envelope 接收端点；其它模式不注册路由，本地不接收也不落盘
+	var envelopeHandler http.Handler
+	var envelopePath string
+	if cfg.SentryMode == sentry.ModeSelf {
+		store, err := localfs.NewSentryStore(filepath.Join(cfg.DataDir, "sentry"))
+		if err != nil {
+			logger.Fatal("failed to resolve sentry directory", zap.Error(err))
+		}
+		logger.Info("sentry envelope directory", zap.String("path", store.Dir()))
+		envelopeHandler = interfacehttp.NewSentryEnvelopeHandler(logger, store)
+		envelopePath = sentry.EnvelopePath
 	}
-	logger.Info("load latency segment directory", zap.String("path", loadLatencyAppender.Dir()))
-	loadLatencyHandler := apploadlatency.NewHandler(loadLatencyAppender, logger)
 
 	sessionRepo := inmem.NewSessionRepository()
 	metadataRepo := xmpsidecar.NewRepository()
@@ -350,9 +355,9 @@ func main() {
 
 	hookHandler := apphook.NewHandler(logger, hookRunner, hookRunner, &imageServiceWrapper{svc: imageService, rootDir: cfg.AbsRootDir}, apphook.NewDTOFactory())
 
-	appRoot := application.NewRoot(sessionHandler, directoryHandler, noteHandler, imageHandler, deviceHandler, pairingHandler, hookHandler, notifHandler, loadLatencyHandler)
+	appRoot := application.NewRoot(sessionHandler, directoryHandler, noteHandler, imageHandler, deviceHandler, pairingHandler, hookHandler, notifHandler)
 
-	resolver := graphql.NewResolver(appRoot, cfg.AbsRootDir, signer, version, cfg.BaseURL, cfg.LoadLatencyThresholdMs)
+	resolver := graphql.NewResolver(appRoot, cfg.AbsRootDir, signer, version, cfg.BaseURL, cfg.SentryDSN, cfg.LoadLatencyThresholdMs)
 
 	// 首次启动时自动拉起浏览器
 	go func() {
@@ -495,6 +500,9 @@ func main() {
 		cfg.CorsHosts,
 		cfg.TrustedIPs,
 		cfg.TrustedProxies,
+		envelopeHandler,
+		envelopePath,
+		cfg.IsDev,
 	)
 
 	logger.Fatal("start server", zap.Error(httpServer.Serve(":"+cfg.Port)))

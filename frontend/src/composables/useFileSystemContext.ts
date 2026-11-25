@@ -57,7 +57,7 @@ export function resolveDisplayName(
 export function useFileSystemContext() {
   const { data } = useQuery(MetaDocument);
   const rootPath = computed(() => data.value?.meta.rootAbsPath || "");
-  // 复用启动时的 Meta 查询，不新增请求；null 表示服务端关闭采集
+  // 复用启动时的 Meta 查询，不新增请求；null 表示服务端关闭性能上报
   const loadLatencyThresholdMs = computed(
     () => data.value?.meta.loadLatencyThresholdMs ?? undefined,
   );
