@@ -56,3 +56,40 @@ func TestSelfDSNRejectsInvalidBaseURL(t *testing.T) {
 		})
 	}
 }
+
+func TestEnvelopeURL(t *testing.T) {
+	selfDSN, err := SelfDSN("http://localhost:34898")
+	require.NoError(t, err)
+
+	for name, tc := range map[string]struct {
+		dsn      string
+		endpoint string
+		key      string
+		wantErr  bool
+	}{
+		"self": {
+			dsn:      selfDSN,
+			endpoint: "http://localhost:34898/api/0/envelope/",
+			key:      SelfPublicKey,
+		},
+		"external": {
+			dsn:      "https://abc123@o12345.ingest.sentry.io/67890",
+			endpoint: "https://o12345.ingest.sentry.io/api/67890/envelope/",
+			key:      "abc123",
+		},
+		"empty":     {dsn: "", wantErr: true},
+		"malformed": {dsn: "not-a-dsn", wantErr: true},
+		"no key":    {dsn: "https://o12345.ingest.sentry.io/67890", wantErr: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			endpoint, key, err := EnvelopeURL(tc.dsn)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.endpoint, endpoint)
+			assert.Equal(t, tc.key, key)
+		})
+	}
+}

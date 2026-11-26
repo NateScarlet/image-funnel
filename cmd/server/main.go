@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -26,9 +27,9 @@ import (
 	domdirectory "main/internal/domain/directory"
 	"main/internal/domain/image"
 	"main/internal/domain/note"
-	"main/internal/domain/sentry"
 	domnotification "main/internal/domain/notification"
 	"main/internal/domain/pairing"
+	"main/internal/domain/sentry"
 	"main/internal/domain/session"
 	"main/internal/infrastructure"
 	"main/internal/infrastructure/clipboard"
@@ -40,6 +41,7 @@ import (
 	"main/internal/infrastructure/localfs"
 	"main/internal/infrastructure/magick"
 	"main/internal/infrastructure/samplearchive"
+	infrasentry "main/internal/infrastructure/sentry"
 	"main/internal/infrastructure/sqlite"
 	"main/internal/infrastructure/stdimage"
 	"main/internal/infrastructure/urlconv"
@@ -63,6 +65,7 @@ import (
 	"github.com/NateScarlet/gqlgen-batching/pkg/batching"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 const defaultPort = "34898"
@@ -103,6 +106,17 @@ func main() {
 		logger.Fatal("failed to load config", zap.Error(err))
 	}
 
+	// 上报链路与接收端共用不带钩子的 logger：任何落盘或发送失败只写日志，不回灌为新事件。
+	// DSN 为空时 NewReporter 返回空实现，不会创建客户端或产生任何事件。
+	safeLogger := logger
+	reporter, err := infrasentry.NewReporter(cfg.SentryDSN, version, &http.Client{})
+	if err != nil {
+		logger.Fatal("failed to initialize sentry reporter", zap.Error(err))
+	}
+	logger = logger.WithOptions(zap.WrapCore(func(core zapcore.Core) zapcore.Core {
+		return infrasentry.NewReportingCore(core, reporter, safeLogger)
+	}))
+
 	signer := urlconv.NewSigner(cfg.SecretKey, cfg.AbsRootDir)
 
 	// 自托管模式才装配 envelope 接收端点；其它模式不注册路由，本地不接收也不落盘
@@ -114,7 +128,7 @@ func main() {
 			logger.Fatal("failed to resolve sentry directory", zap.Error(err))
 		}
 		logger.Info("sentry envelope directory", zap.String("path", store.Dir()))
-		envelopeHandler = interfacehttp.NewSentryEnvelopeHandler(logger, store)
+		envelopeHandler = interfacehttp.NewSentryEnvelopeHandler(safeLogger, store)
 		envelopePath = sentry.EnvelopePath
 	}
 
@@ -218,7 +232,7 @@ func main() {
 	notifDTOFactory := appnotification.NewDTOFactory()
 	notifFactory := &domnotification.Factory{}
 	notifService := domnotification.NewService(sqliteNotifRepo, notifFactory, notifChangedTopic)
-	notifHandler := appnotification.NewHandler(sqliteNotifRepo, notifService, notifDTOFactory, notifFilterBuilder, notifChangedTopic, logger)
+	notifHandler := appnotification.NewHandler(sqliteNotifRepo, notifService, notifDTOFactory, notifFilterBuilder, notifChangedTopic, safeLogger)
 
 	// 初始化外部钩子服务： Hook 脚本在本地执行，直接连接本机的监听端口
 	localGraphQLURL := fmt.Sprintf("http://127.0.0.1:%s/graphql", cfg.Port)
@@ -309,7 +323,7 @@ func main() {
 	filterBuilder := domdirectory.NewFilterBuilder()
 
 	directoryHandler := appdirectory.NewHandler(
-		logger,
+		safeLogger,
 		dirAnalyzer,
 		directoryDTOFactory,
 		filterBuilder,
@@ -322,7 +336,7 @@ func main() {
 		sessionService,
 		sessionDTOFactory,
 		imageDTOFactory,
-		logger,
+		safeLogger,
 		dirSvc,
 		sessionTopic,
 		sessionCommittedTopic,
@@ -330,9 +344,9 @@ func main() {
 	noteDTOFactory := appnote.NewDTOFactory(cfg.AbsRootDir)
 	noteFilterBuilder := note.NewFilterBuilder()
 	noteRepository := localfs.NewNoteRepository(cfg.AbsRootDir)
-	noteHandler := appnote.NewHandler(logger, noteRepository, note.NewService(noteRepository, note.NewFactory(cfg.AbsRootDir), cfg.AbsRootDir), dirSvc, fileChangedTopic, noteDTOFactory, noteFilterBuilder, savedEvents)
+	noteHandler := appnote.NewHandler(safeLogger, noteRepository, note.NewService(noteRepository, note.NewFactory(cfg.AbsRootDir), cfg.AbsRootDir), dirSvc, fileChangedTopic, noteDTOFactory, noteFilterBuilder, savedEvents)
 	clipboard := clipboard.NewClipboard()
-	imageHandler := appimage.NewHandler(imageService, fileChangedTopic, imageRepo, imgMover, imgTrasher, dirSvc, imageDTOFactory, imageFilterBuilder, logger, cfg.AbsRootDir, imageFactory, clipboard, hookRunner)
+	imageHandler := appimage.NewHandler(imageService, fileChangedTopic, imageRepo, imgMover, imgTrasher, dirSvc, imageDTOFactory, imageFilterBuilder, safeLogger, cfg.AbsRootDir, imageFactory, clipboard, hookRunner)
 
 	rawAuthRepo, err := localfs.NewDeviceRepository(cfg.DataDir)
 	if err != nil {
@@ -349,11 +363,11 @@ func main() {
 	if err != nil {
 		logger.Fatal("Failed to initialize auth service", zap.Error(err))
 	}
-	deviceHandler := appdevice.NewHandler(authService, tokenSource, deviceDTOFactory, logger, deviceSavedTopic, deviceDeletedTopic)
+	deviceHandler := appdevice.NewHandler(authService, tokenSource, deviceDTOFactory, safeLogger, deviceSavedTopic, deviceDeletedTopic)
 	pairingDTOFactory := apppairing.NewDTOFactory()
-	pairingHandler := apppairing.NewHandler(logger, authService, pairingService, pairingDTOFactory)
+	pairingHandler := apppairing.NewHandler(safeLogger, authService, pairingService, pairingDTOFactory)
 
-	hookHandler := apphook.NewHandler(logger, hookRunner, hookRunner, &imageServiceWrapper{svc: imageService, rootDir: cfg.AbsRootDir}, apphook.NewDTOFactory())
+	hookHandler := apphook.NewHandler(safeLogger, hookRunner, hookRunner, &imageServiceWrapper{svc: imageService, rootDir: cfg.AbsRootDir}, apphook.NewDTOFactory())
 
 	appRoot := application.NewRoot(sessionHandler, directoryHandler, noteHandler, imageHandler, deviceHandler, pairingHandler, hookHandler, notifHandler)
 
@@ -425,12 +439,20 @@ func main() {
 		Cache: lru.New[string](100),
 	})
 	srv.SetRecoverFunc(func(ctx context.Context, e any) error {
+		// panic 显式上报：用 "panic" 字段名避免日志 hook 把同一事件重复上报。
 		logger.Error(
 			"internal server error",
-			zap.Any("error", e),
+			zap.Any("panic", e),
 			zap.String("path", gql.GetPath(ctx).String()),
 			zap.Stack("stack"),
 		)
+		if err := reporter.Report(ctx, sentry.Event{
+			Panic:       e,
+			Stack:       debug.Stack(),
+			Fingerprint: []string{"server", "panic"},
+		}); err != nil {
+			safeLogger.Error("failed to report panic", zap.Error(err))
+		}
 		return apperror.New(
 			"INTERNAL_SERVER_ERROR",
 			"internal server error",
@@ -460,6 +482,10 @@ func main() {
 		res, err = next(ctx)
 		for i := range apperror.ExpandJoinError(err) {
 			gql.AddError(ctx, i)
+			// 应用层用安全 logger 避免重复上报；resolver 的意外错误在此统一进入日志 hook
+			if sentry.ShouldReport(i) {
+				logger.Error("resolver failed", zap.Error(i), zap.String("path", gql.GetPath(ctx).String()))
+			}
 		}
 		return res, nil
 	})

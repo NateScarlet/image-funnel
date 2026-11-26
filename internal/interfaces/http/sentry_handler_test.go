@@ -4,13 +4,23 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+
+	domsentry "main/internal/domain/sentry"
+	"main/internal/infrastructure/localfs"
+	infrasentry "main/internal/infrastructure/sentry"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type fakeSentryStore struct {
@@ -151,6 +161,72 @@ func TestDevOriginCanReachEnvelopeEndpoint(t *testing.T) {
 	assert.True(t, isDevOriginAllowed("http://127.0.0.1:5173"))
 	assert.False(t, isDevOriginAllowed("https://evil.example"))
 	assert.False(t, isDevOriginAllowed("not-a-url"))
+}
+
+func TestSentryEnvelopeHandlerStoreFailureDoesNotTriggerReport(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	dsn, err := domsentry.SelfDSN(server.URL)
+	require.NoError(t, err)
+	reporter, err := infrasentry.NewReporter(dsn, "test", server.Client())
+	require.NoError(t, err)
+	safeLogger := zap.New(zapcore.NewNopCore())
+	hookedCore, _ := observer.New(zap.ErrorLevel)
+	hookedLogger := zap.New(infrasentry.NewReportingCore(hookedCore, reporter, safeLogger))
+
+	store := &fakeSentryStore{err: errors.New("disk full")}
+	body := bytes.NewReader(envelopeBody("boom"))
+	NewSentryEnvelopeHandler(safeLogger, store).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, domsentry.EnvelopePath, body))
+	assert.Zero(t, requests, "接收端落盘失败只能记日志，不能产生新的上报 envelope")
+
+	hookedLogger.Error("infrastructure failure", zap.Error(errors.New("boom")))
+	assert.Equal(t, 1, requests, "普通业务路径的意外错误仍应经接收端点上报")
+}
+
+func TestServerErrorLandsInFingerprintDirectoryScrubbed(t *testing.T) {
+	store, err := localfs.NewSentryStore(filepath.Join(t.TempDir(), "sentry"))
+	require.NoError(t, err)
+	handler := NewSentryEnvelopeHandler(zap.NewNop(), store)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler.ServeHTTP(w, r)
+	}))
+	defer server.Close()
+
+	dsn, err := domsentry.SelfDSN(server.URL)
+	require.NoError(t, err)
+	reporter, err := infrasentry.NewReporter(dsn, "test", server.Client())
+	require.NoError(t, err)
+	core, _ := observer.New(zap.ErrorLevel)
+	logger := zap.New(infrasentry.NewReportingCore(core, reporter, zap.NewNop()))
+
+	logger.Error("infrastructure failure", zap.Error(errors.New(`open C:\Users\alice\secret.key: token=s3cr3t-ABCDEFGHIJ`)))
+
+	var path string
+	require.NoError(t, filepath.WalkDir(store.Dir(), func(candidate string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".envelope") {
+			path = candidate
+		}
+		return nil
+	}))
+	require.NotEmpty(t, path, "服务端错误应经接收端点落盘")
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	envelope, err := domsentry.ParseEnvelope(data)
+	require.NoError(t, err)
+	assert.Equal(t, domsentry.DirectoryName(domsentry.EventFingerprint(envelope.EventJSON)), filepath.Base(filepath.Dir(path)))
+	for _, secret := range []string{`C:\Users\alice\secret.key`, "s3cr3t-ABCDEFGHIJ"} {
+		assert.NotContains(t, string(data), secret, "本地落盘内容同样必须脱敏")
+	}
 }
 
 func TestSentryRouteOnlyExistsInSelfHostedMode(t *testing.T) {

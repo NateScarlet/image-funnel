@@ -4,6 +4,7 @@ package sentry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -44,25 +45,32 @@ func Parse(raw string) (Mode, error) {
 	if raw == SelfDSNValue {
 		return ModeSelf, nil
 	}
+	if _, err := parseExternalDSN(raw); err != nil {
+		return ModeOff, err
+	}
+	return ModeExternal, nil
+}
 
+// parseExternalDSN 是外部 DSN 的唯一解析入口，模式判断与端点还原共用同一套规则。
+func parseExternalDSN(raw string) (*url.URL, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return ModeOff, fmt.Errorf("not a valid sentry DSN: %w", err)
+		return nil, fmt.Errorf("not a valid sentry DSN: %w", err)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return ModeOff, fmt.Errorf("unsupported sentry DSN scheme %q", u.Scheme)
+		return nil, fmt.Errorf("unsupported sentry DSN scheme %q", u.Scheme)
 	}
 	if u.User == nil || u.User.Username() == "" {
-		return ModeOff, fmt.Errorf("sentry DSN must contain a public key")
+		return nil, fmt.Errorf("sentry DSN must contain a public key")
 	}
 	if u.Host == "" {
-		return ModeOff, fmt.Errorf("sentry DSN must contain a host")
+		return nil, fmt.Errorf("sentry DSN must contain a host")
 	}
 	projectID := strings.Trim(u.Path, "/")
 	if projectID == "" || strings.Contains(projectID, "/") {
-		return ModeOff, fmt.Errorf("sentry DSN must contain exactly one project id")
+		return nil, fmt.Errorf("sentry DSN must contain exactly one project id")
 	}
-	return ModeExternal, nil
+	return u, nil
 }
 
 // SelfDSN 生成一个指向自身 envelope 端点的标准 DSN。
@@ -79,4 +87,21 @@ func SelfDSN(baseURL string) (string, error) {
 		return "", fmt.Errorf("base URL must contain a host: %q", baseURL)
 	}
 	return fmt.Sprintf("%s://%s@%s/%s", u.Scheme, SelfPublicKey, u.Host, SelfProjectID), nil
+}
+
+// EnvelopeURL 把配置层产出的 DSN 还原为 SDK 契约下的 envelope 端点与公钥。
+// 自托管与外部 DSN 共用同一转换，调用方不得自行拼接路径或读取环境变量。
+func EnvelopeURL(dsn string) (endpoint, publicKey string, err error) {
+	if dsn == "" {
+		return "", "", errors.New("sentry DSN is empty")
+	}
+	if dsn == SelfDSNValue {
+		return "", "", errors.New("self-hosted DSN marker must be resolved by config first")
+	}
+	u, err := parseExternalDSN(dsn)
+	if err != nil {
+		return "", "", err
+	}
+	projectID := strings.Trim(u.Path, "/")
+	return fmt.Sprintf("%s://%s/api/%s/envelope/", u.Scheme, u.Host, projectID), u.User.Username(), nil
 }
