@@ -103,3 +103,68 @@ describe("导航链路单事件上报", () => {
     expect(options?.beforeSend).toBeTypeOf("function");
   });
 });
+
+describe("发送前过滤取消噪音", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function send(event: Record<string, unknown>): unknown {
+    initTelemetry("https://key@example.com/1", {} as never);
+    const beforeSend = sentry.init.mock.calls[0]?.[0]?.beforeSend as (e: unknown) => unknown;
+    return beforeSend(event);
+  }
+
+  const cancellation = {
+    exception: {
+      values: [
+        {
+          type: "AbortError",
+          value: "The operation was aborted.",
+          mechanism: {
+            type: "auto.browser.global_handlers.onunhandledrejection",
+            handled: false,
+          },
+        },
+      ],
+    },
+  };
+
+  test("丢弃全局未捕获的 Apollo 取消 AbortError", () => {
+    expect(send(cancellation)).toBeNull();
+  });
+
+  test("保留显式上报的同类 AbortError", () => {
+    const event = {
+      exception: {
+        values: [
+          {
+            type: "AbortError",
+            value: "The operation was aborted.",
+            mechanism: { type: "generic" },
+          },
+        ],
+      },
+    };
+
+    expect(send(event)).not.toBeNull();
+  });
+
+  test("保留其他错误并照常脱敏", () => {
+    const event = {
+      exception: { values: [{ type: "Error", value: "failed at C:/Users/me/secret" }] },
+      extra: {},
+      tags: {},
+      contexts: {},
+    };
+
+    const result = send(event) as {
+      extra: Record<string, unknown>;
+      exception: { values: { value: string }[] };
+    };
+
+    expect(result).not.toBeNull();
+    expect(result.extra.scrubSalt).toEqual(expect.any(String));
+    expect(result.exception.values[0]?.value).not.toContain("C:/Users/me/secret");
+  });
+});

@@ -123,6 +123,24 @@ export interface MarkPerformanceEvent {
 // #endregion
 
 /**
+ * Apollo Client 取消在途 query 时，AbortError 会以未处理 rejection 被全局 handler 捕获。
+ * 这是预期的取消信号而非需要开发者处理的错误，发送前直接丢弃；
+ * 同时限定 mechanism 与文案，避免误伤显式上报的其他 AbortError。
+ */
+function isCancellationNoise(event: {
+  exception?: {
+    values?: { type?: string; value?: string; mechanism?: { type?: string } }[];
+  };
+}): boolean {
+  const value = event.exception?.values?.[0];
+  return (
+    value?.type === "AbortError" &&
+    value.value === "The operation was aborted." &&
+    value.mechanism?.type === "auto.browser.global_handlers.onunhandledrejection"
+  );
+}
+
+/**
  * 从 meta 下发的 DSN 初始化 SDK。空串表示关闭：不调用 init，后续 capture 自动成为空操作。
  * 客户端不感知自托管模式，始终使用 SDK 默认 transport 直发 DSN 指定的服务。
  */
@@ -134,7 +152,7 @@ export function initTelemetry(dsn: string, app: App): void {
     dsn,
     release: __APP_VERSION__,
     integrations: [Sentry.vueIntegration({ app, attachProps: false })],
-    beforeSend: (event) => scrubEvent(event, newSalt()),
+    beforeSend: (event) => (isCancellationNoise(event) ? null : scrubEvent(event, newSalt())),
   });
 }
 
