@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -33,13 +34,18 @@ func (s *SentryStore) Save(ctx context.Context, fingerprintDir, eventID string, 
 		return "", err
 	}
 
+	// 分片目录名已由领域层 DirectoryName 清洗并截断，二次清洗会破坏 ...(N more) 标记
+	if fingerprintDir == "" || fingerprintDir == "." || fingerprintDir == ".." || filepath.Base(fingerprintDir) != fingerprintDir {
+		return "", fmt.Errorf("invalid fingerprint directory %q", fingerprintDir)
+	}
+
 	name := sentry.Sanitize(eventID)
 	if name == "" {
 		sum := sha256.Sum256(data)
 		name = hex.EncodeToString(sum[:])
 	}
 
-	dir := filepath.Join(s.dir, sentry.Sanitize(fingerprintDir))
+	dir := filepath.Join(s.dir, fingerprintDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}

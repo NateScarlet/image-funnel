@@ -4,7 +4,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"main/internal/domain/sentry"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,7 +36,27 @@ func TestSentryStoreSanitizesEventID(t *testing.T) {
 
 	path, err := store.Save(context.Background(), "fingerprint", "../evil/id", []byte("{}"))
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(store.Dir(), "fingerprint", "___evil_id.envelope"), path)
+	assert.Equal(t, filepath.Join(store.Dir(), "fingerprint", "\ufffd\ufffdevil\ufffdid.envelope"), path)
+}
+
+func TestSentryStorePreservesTruncationMarkerInDirectoryName(t *testing.T) {
+	fingerprint := sentry.DirectoryName([]string{strings.Repeat("a", sentry.MaxDirectoryNameBytes*2)})
+	require.Contains(t, fingerprint, "...(")
+
+	store, err := NewSentryStore(t.TempDir())
+	require.NoError(t, err)
+
+	path, err := store.Save(context.Background(), fingerprint, "abc123", []byte("{}"))
+	require.NoError(t, err)
+	assert.Equal(t, fingerprint, filepath.Base(filepath.Dir(path)))
+}
+
+func TestSentryStoreRejectsPathLikeFingerprintDirectory(t *testing.T) {
+	store, err := NewSentryStore(t.TempDir())
+	require.NoError(t, err)
+
+	_, err = store.Save(context.Background(), "../evil", "abc123", []byte("{}"))
+	require.Error(t, err)
 }
 
 func TestSentryStoreGeneratesIDWhenMissing(t *testing.T) {

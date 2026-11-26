@@ -33,6 +33,10 @@ func envelopeBody(fingerprint string) []byte {
 		event += `,"fingerprint":["` + fingerprint + `"]`
 	}
 	event += `}`
+	return envelopeBodyWithEvent(event)
+}
+
+func envelopeBodyWithEvent(event string) []byte {
 	return []byte(`{"event_id":"abc123"}` + "\n" +
 		`{"type":"event"}` + "\n" +
 		event + "\n")
@@ -53,16 +57,47 @@ func TestSentryEnvelopeHandlerPersistsEventWithExplicitFingerprint(t *testing.T)
 	assert.Equal(t, body, store.data, "落盘内容必须是收到的完整 envelope 原样字节")
 }
 
-func TestSentryEnvelopeHandlerComputesFingerprintWhenMissing(t *testing.T) {
-	store := &fakeSentryStore{}
-	handler := NewSentryEnvelopeHandler(zap.NewNop(), store)
+func TestSentryEnvelopeHandlerDerivesReadableFingerprintWhenMissing(t *testing.T) {
+	for name, tc := range map[string]struct {
+		event string
+		want  string
+	}{
+		"message":   {`{"level":"error","message":"boom"}`, "error\ufffd boom"},
+		"exception": {`{"exception":{"values":[{"type":"TypeError","value":"boom"}]}}`, "TypeError\ufffd boom"},
+		"logentry":  {`{"level":"warn","logger":"scanner","logentry":"slow"}`, "warn\ufffd scanner\ufffd slow"},
+		"chinese":   {`{"level":"error","message":"加载超时"}`, "error\ufffd 加载超时"},
+		"timestamp": {`{"timestamp":1764163912.123456}`, "Event1764163912123456"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := &fakeSentryStore{}
+			handler := NewSentryEnvelopeHandler(zap.NewNop(), store)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/0/envelope/", bytes.NewReader(envelopeBody("")))
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
+			body := envelopeBodyWithEvent(tc.event)
+			req := httptest.NewRequest(http.MethodPost, "/api/0/envelope/", bytes.NewReader(body))
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
 
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, store.fingerprintDir, "sha256-")
+			assert.Equal(t, http.StatusOK, rec.Code)
+			assert.Equal(t, tc.want, store.fingerprintDir)
+			assert.NotContains(t, store.fingerprintDir, "sha256-")
+			assert.Equal(t, body, store.data, "落盘内容必须是收到的完整 envelope 原样字节")
+		})
+	}
+}
+
+func TestSentryEnvelopeHandlerEventFallbackVariesByEventTime(t *testing.T) {
+	first := &fakeSentryStore{}
+	NewSentryEnvelopeHandler(zap.NewNop(), first).ServeHTTP(
+		httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodPost, "/api/0/envelope/", bytes.NewReader(envelopeBodyWithEvent(`{"timestamp":1764163912.123456}`))),
+	)
+	second := &fakeSentryStore{}
+	NewSentryEnvelopeHandler(zap.NewNop(), second).ServeHTTP(
+		httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodPost, "/api/0/envelope/", bytes.NewReader(envelopeBodyWithEvent(`{"timestamp":1764163999.654321}`))),
+	)
+
+	assert.NotEqual(t, first.fingerprintDir, second.fingerprintDir)
 }
 
 func TestSentryEnvelopeHandlerRejectsBadRequest(t *testing.T) {
