@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.11.0](https://github.com/NateScarlet/image-funnel/compare/v1.10.0...v1.11.0) (2026-11-27)
+
+
+### Features
+
+* **example-hooks/krita-open:** prune saved tabs after opening images ([c39c528](https://github.com/NateScarlet/image-funnel/commit/c39c52812d2348382e0031a3a55fdacb4ad0a8db)), closes [#204](https://github.com/NateScarlet/image-funnel/issues/204)
+* replace load-latency reporting with self-hosted Sentry ([5e638b6](https://github.com/NateScarlet/image-funnel/commit/5e638b6557d3e70f8df306841599fe8ad6a81556)), closes [#205](https://github.com/NateScarlet/image-funnel/issues/205)
+* **sentry:** derive readable shard names when fingerprint is missing ([81ffc13](https://github.com/NateScarlet/image-funnel/commit/81ffc136fe5a7bdb6d710c62a51199e41ce06a70)), closes [#207](https://github.com/NateScarlet/image-funnel/issues/207)
+* **server:** report backend errors to sentry with isolated receive path ([b259ef5](https://github.com/NateScarlet/image-funnel/commit/b259ef5f0859cc28b7c5d51ba795c76b67f16829)), closes [#208](https://github.com/NateScarlet/image-funnel/issues/208)
+
+
+### Bug Fixes
+
+* **ci:** should create Windows release archive without zip ([cc9287b](https://github.com/NateScarlet/image-funnel/commit/cc9287b2f665ad8d20c0fde963abd08db3fd8555))
+* **example-hooks/krita-open:** should open images via RPC before pruning tabs ([6825a20](https://github.com/NateScarlet/image-funnel/commit/6825a204f919742a2bdd82ac89cd65753d9de7f4)), closes [#206](https://github.com/NateScarlet/image-funnel/issues/206)
+* **frontend:** should not report aborted Apollo cancellations to Sentry ([e6d6393](https://github.com/NateScarlet/image-funnel/commit/e6d63931338ca1d95f11418a54177e70e6a418cb))
+* **sentry:** should replace illegal path characters with underscores ([5d6bedf](https://github.com/NateScarlet/image-funnel/commit/5d6bedf822341adbeb3d8fa750e6815e3264fad4)), closes [#209](https://github.com/NateScarlet/image-funnel/issues/209)
+
 ## [1.10.0](https://github.com/NateScarlet/image-funnel/compare/v1.9.0...v1.10.0) (2026-11-23)
 
 
