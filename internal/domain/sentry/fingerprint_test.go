@@ -31,8 +31,25 @@ func TestSanitizeReplacesOnlyIllegalCharacters(t *testing.T) {
 }
 
 func TestSanitizeKeepsWindowsReservedNameSafe(t *testing.T) {
-	assert.Equal(t, "\ufffd", Sanitize("CON"))
-	assert.Equal(t, "file\ufffd", Sanitize("file. "))
+	assert.Equal(t, "_", Sanitize("CON"))
+	assert.Equal(t, "file_", Sanitize("file. "))
+}
+
+func TestSanitizeFoldsConsecutiveIllegalCharactersIntoOneUnderscore(t *testing.T) {
+	assert.Equal(t, "_", Sanitize(".."))
+	assert.Equal(t, "file_", Sanitize("file. "))
+}
+
+func TestSanitizeMapsInvalidUTF8BytesToUnderscore(t *testing.T) {
+	name := Sanitize(string([]byte{'a', 0xff, 'b'}))
+
+	assert.Equal(t, "a_b", name)
+	assert.NotContains(t, name, "\ufffd")
+	assert.True(t, utf8.ValidString(name))
+}
+
+func TestSanitizePreservesLegalUnderscores(t *testing.T) {
+	assert.Equal(t, "already_safe_name", Sanitize("already_safe_name"))
 }
 
 func TestDirectoryNameTruncatesUnicodeAtRuneBoundary(t *testing.T) {

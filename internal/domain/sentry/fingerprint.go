@@ -69,9 +69,17 @@ func Sanitize(value string) string {
 }
 
 func sanitize(value string) string {
-	// strings.Map 把非法 UTF-8 字节规范成 U+FFFD，后续正则按字符处理
-	normalized := strings.Map(func(r rune) rune { return r }, value)
-	return invalidFileNameCharPattern.ReplaceAllLiteralString(normalized, "\ufffd")
+	// strings.Map 遍历时会把非法 UTF-8 字节解码成 U+FFFD，这里直接归一为下划线，
+	// 避免落盘路径出现不可读、难以在命令行引用的替换字符。
+	// 正则命中项整体替换为一个下划线：点序列、尾点空格与保留名按整段匹配，
+	// 单个路径/控制字符则逐字替换。
+	normalized := strings.Map(func(r rune) rune {
+		if r == utf8.RuneError {
+			return '_'
+		}
+		return r
+	}, value)
+	return invalidFileNameCharPattern.ReplaceAllLiteralString(normalized, "_")
 }
 
 // EventFingerprint 优先返回事件显式设置的指纹；缺失时按 message/exception/logentry

@@ -36,7 +36,8 @@ func TestSentryStoreSanitizesEventID(t *testing.T) {
 
 	path, err := store.Save(context.Background(), "fingerprint", "../evil/id", []byte("{}"))
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(store.Dir(), "fingerprint", "\ufffd\ufffdevil\ufffdid.envelope"), path)
+	assert.Equal(t, filepath.Join(store.Dir(), "fingerprint", "__evil_id.envelope"), path)
+	assert.NotContains(t, path, "\ufffd")
 }
 
 func TestSentryStorePreservesTruncationMarkerInDirectoryName(t *testing.T) {

@@ -72,10 +72,10 @@ func TestSentryEnvelopeHandlerDerivesReadableFingerprintWhenMissing(t *testing.T
 		event string
 		want  string
 	}{
-		"message":   {`{"level":"error","message":"boom"}`, "error\ufffd boom"},
-		"exception": {`{"exception":{"values":[{"type":"TypeError","value":"boom"}]}}`, "TypeError\ufffd boom"},
-		"logentry":  {`{"level":"warn","logger":"scanner","logentry":"slow"}`, "warn\ufffd scanner\ufffd slow"},
-		"chinese":   {`{"level":"error","message":"加载超时"}`, "error\ufffd 加载超时"},
+		"message":   {`{"level":"error","message":"boom"}`, "error_ boom"},
+		"exception": {`{"exception":{"values":[{"type":"TypeError","value":"boom"}]}}`, "TypeError_ boom"},
+		"logentry":  {`{"level":"warn","logger":"scanner","logentry":"slow"}`, "warn_ scanner_ slow"},
+		"chinese":   {`{"level":"error","message":"加载超时"}`, "error_ 加载超时"},
 		"timestamp": {`{"timestamp":1764163912.123456}`, "Event1764163912123456"},
 	} {
 		t.Run(name, func(t *testing.T) {
